@@ -61,3 +61,32 @@ ListTopics mislim da server side streaming na userja
 GetMessages isto kot ListTopics
 
 SubscribeTopic ?
+
+numUsers
+numTopics
+Neki za userje (Map [Key: Imena, Value: User(struct) (obicen array), password(DODAJ NA PROTOFILE)])
+Neki za Topics (Map [Key: Ime, Value: Id] orderedMaps, subscriptionArray isto kokr likes za messages)
+Neki za messages LinkedList dodaj likesArray na vsak message [samo bitmap Dolzine userNum]
+Pa neki za likes (lahka del messageou)
+Pa neki za subscription (lahka del topic)
+
+xor encrypton za login (dodaj grpc funkcijo za logout pa login)
+
+
+protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative razpravljalnica/razpravljalnica.proto
+
+
+
+
+
+dodaj v proto
+
+Topic
+numberOfMessages added
+
+User
+password
+
+
+
+Vprasi kaj je misljen kot subscriptionNode
