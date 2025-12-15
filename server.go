@@ -51,7 +51,7 @@ type server struct {
 func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*razp.User, error) {
 
 	newUserName := in.Name
-
+	newPassword := in.Password
 	if numOfUsers != 0 {
 		for _, user := range users {
 			if user.Name == newUserName {
@@ -60,13 +60,32 @@ func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*raz
 			}
 		}
 	}
-
+	if newPassword == "" {
+		return nil, status.Error(codes.InvalidArgument, "password required")
+	}
+	//dodat potrebno za sifrirat
+	newUser := &razp.User{Id: numOfUsers, Name: newUserName, Password: newPassword}
 	numOfUsers += 1
-	newUser := &razp.User{Id: numOfUsers, Name: newUserName}
 	users = append(users, newUser)
-	fmt.Printf("Added New User, Id:%d Name: %s\n", newUser.Id, newUser.Name)
+	fmt.Printf("Added New User, Id:%d Name: %s, Password: %s\n", newUser.Id, newUser.Name, newUser.Password)
 
 	return newUser, nil
+}
+
+func (s *server) FindUser(_ context.Context, in *razp.CreateUserRequest) (*emptypb.Empty, error) {
+	userName := in.Name
+	userPass := in.Password
+
+	for _, user := range users {
+		if user.Name == userName {
+			if user.Password == userPass {
+				return &emptypb.Empty{}, nil
+			} else {
+				return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Wrong password")
+			}
+		}
+	}
+	return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "User does not exist")
 }
 
 func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*razp.Topic, error) {
@@ -84,8 +103,8 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 		}
 	}
 
+	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName, NumberOfMessage: 0}
 	numOfTopics += 1
-	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName, NumberOfMessages: 0}
 	topics = append(topics, newTopic)
 
 	topicMessages = append(topicMessages, make([]*razp.Message, 0, 10))
@@ -98,10 +117,10 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*razp.Message, error) {
 
 	topicIdx := in.TopicId - 1
-	topics[topicIdx].NumberOfMessages += 1
-	numOfTopicMessages := topics[topicIdx].NumberOfMessages
+	numOfTopicMessages := topics[topicIdx].NumberOfMessage
 	currentTime := timestamppb.Now()
 	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
+	topics[topicIdx].NumberOfMessage += 1
 	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
 
 	return newMessage, nil
@@ -111,7 +130,7 @@ func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*r
 
 	// implementi linked list za messages al pa ne sj nvm probi zdle array/slice pa bomo pol fixal ce bo treba
 	topicIdx := in.TopicId - 1
-	numOfTopicMessages := topics[topicIdx].NumberOfMessages
+	numOfTopicMessages := topics[topicIdx].NumberOfMessage
 	if in.FromMessageId > numOfTopicMessages {
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
