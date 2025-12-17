@@ -29,10 +29,19 @@ import (
 	razp "razpravljalnica/razpravljalnica"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
-	port = flag.Int("port", 50051, "The server port")
+	port                = flag.Int("port", 50051, "The server port")
+	numOfUsers    int64 = 0
+	numOfTopics   int64 = 0
+	users               = make([]*razp.User, 0, 10)
+	topics              = make([]*razp.Topic, 0, 10)
+	topicMessages       = make([][]*razp.Message, 0, 10)
 )
 
 type server struct {
@@ -41,10 +50,121 @@ type server struct {
 
 func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*razp.User, error) {
 
-	fmt.Printf("Added New User")
-	newUser := &razp.User{Id: 1, Name: "Mojca"}
+	newUserName := in.Name
+	newPassword := in.Password
+	if numOfUsers != 0 {
+		for _, user := range users {
+			if user.Name == newUserName {
+				return nil, status.Errorf(codes.Aborted, "User with same name already exists, please choose a different name")
+				// ne izpise errorja plus poglej ce se da to mogoce nrdit tak da avtomatsko relauncha request za CreateUser verjetno rabim v clientu se enkrat callat
+			}
+		}
+	}
+	if newPassword == "" {
+		return nil, status.Error(codes.InvalidArgument, "password required")
+	}
+	//dodat potrebno za sifrirat
+	newUser := &razp.User{Id: numOfUsers, Name: newUserName, Password: newPassword}
+	numOfUsers += 1
+	users = append(users, newUser)
+	fmt.Printf("Added New User, Id:%d Name: %s, Password: %s\n", newUser.Id, newUser.Name, newUser.Password)
 
 	return newUser, nil
+}
+
+func (s *server) FindUser(_ context.Context, in *razp.CreateUserRequest) (*emptypb.Empty, error) {
+	userName := in.Name
+	userPass := in.Password
+
+	for _, user := range users {
+		if user.Name == userName {
+			if user.Password == userPass {
+				return &emptypb.Empty{}, nil
+			} else {
+				return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "Wrong password")
+			}
+		}
+	}
+	return &emptypb.Empty{}, status.Error(codes.InvalidArgument, "User does not exist")
+}
+
+func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*razp.Topic, error) {
+
+	newTopicName := in.Name
+
+	if numOfTopics != 0 {
+		// fmt.Print("tsets")
+		for _, topic := range topics {
+			if topic.Name == newTopicName {
+				return nil, status.Error(codes.Aborted, "Topic with same name already exists, please choose a different name")
+				// ne izpise errorja ampak ga poslje, lahka si ga pol printas ce hoces
+				// plus poglej ce se da to mogoce nrdit tak da avtomatsko relauncha request za CreateUser verjetno rabim v clientu se enkrat callat
+			}
+		}
+	}
+
+	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName, NumberOfMessage: 0}
+	numOfTopics += 1
+	topics = append(topics, newTopic)
+
+	topicMessages = append(topicMessages, make([]*razp.Message, 0, 10))
+
+	fmt.Printf("Added New Topic, Id:%d Name: %s\n", newTopic.Id, newTopic.Name)
+
+	return newTopic, nil
+}
+
+func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*razp.Message, error) {
+
+	topicIdx := in.TopicId - 1
+	numOfTopicMessages := topics[topicIdx].NumberOfMessage
+	currentTime := timestamppb.Now()
+	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
+	topics[topicIdx].NumberOfMessage += 1
+	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
+
+	return newMessage, nil
+}
+
+func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*razp.GetMessagesResponse, error) {
+
+	// implementi linked list za messages al pa ne sj nvm probi zdle array/slice pa bomo pol fixal ce bo treba
+	topicIdx := in.TopicId - 1
+	numOfTopicMessages := topics[topicIdx].NumberOfMessage
+	if in.FromMessageId > numOfTopicMessages {
+		return nil, status.Error(codes.Aborted, "This messageID does not exist")
+	}
+	// ce je messageId prevlek ne bo delal
+	if in.TopicId > numOfTopics {
+		return nil, status.Error(codes.Aborted, "This topicID does not exist")
+	}
+
+	var messageInterval []*razp.Message = topicMessages[topicIdx][:]
+	var leftInterval int64
+	var rightInterval int64
+	if in.Limit+int32(in.FromMessageId) > int32(numOfTopicMessages) {
+		leftInterval = in.FromMessageId - 1
+		rightInterval = numOfTopicMessages // ker slice ig vzame od vkljucno indexa do indexa (ne vkljucno)
+	} else {
+		leftInterval = in.FromMessageId - 1
+		rightInterval = in.FromMessageId + int64(in.Limit)
+	}
+
+	messageInterval = messageInterval[leftInterval:rightInterval]
+	// fmt.Printf("LeftInterval:%d RightInterval:%d", leftInterval, rightInterval)
+	newGetMessagesResponse := &razp.GetMessagesResponse{Messages: messageInterval}
+
+	return newGetMessagesResponse, nil
+}
+
+func (s *server) ListTopics(_ context.Context, empty *emptypb.Empty) (*razp.ListTopicsResponse, error) {
+
+	// implementi linked list za messages al pa ne sj nvm probi zdle array/slice pa bomo pol fixal ce bo treba
+
+	var allTopics []*razp.Topic = topics[:]
+	newListTopicsResponse := &razp.ListTopicsResponse{Topics: allTopics}
+
+	return newListTopicsResponse, nil
 }
 
 func main() {
