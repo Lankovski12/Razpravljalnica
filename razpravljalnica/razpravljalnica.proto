@@ -63,7 +63,7 @@ service  MessageBoard{
   // Creates a new user and assigns it an id
   rpc CreateUser(CreateUserRequest) returns (User);
 
-  rpc FindUser(CreateUserRequest) returns (google.protobuf.Empty);
+  rpc FindUser(FindUserRequest) returns (User);
 
   // Creates a new topic to which users can post messages
   rpc CreateTopic(CreateTopicRequest) returns (Topic);
@@ -99,6 +99,15 @@ service  MessageBoard{
 message CreateUserRequest {
   string name = 1;
   string password = 2;
+}
+
+message FindUserRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message ReturnUserRequest {
+  int64 id = 1;
 }
 
 message CreateTopicRequest {
