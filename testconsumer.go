@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
 	razp "razpravljalnica/razpravljalnica"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -24,13 +26,16 @@ func main() {
 		panic(err)
 	}
 	defer conn.Close()
+	fmt.Print("Write name and pass: ")
+	var name, pass string
+	fmt.Scan(&name, &pass)
+	fmt.Printf("Name: %s Pass: %s\n", name, pass)
 
 	grpcClient := razp.NewMessageBoardClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second) //idk kak deluje ctx tocn tak da to mal poglej
+	ctx, cancel := context.WithCancel(context.Background()) //idk kak deluje ctx tocn tak da to mal poglej
 	defer cancel()
-
-	newUser, err := grpcClient.CreateUser(ctx, &razp.CreateUserRequest{Name: "Neza", Password: "Test"})
+	newUser, err := grpcClient.CreateUser(ctx, &razp.CreateUserRequest{Name: name, Password: pass})
 	fmt.Printf("Username: %s, Id: %d\n", newUser.Name, newUser.Id)
 
 	newTopic, err := grpcClient.CreateTopic(ctx, &razp.CreateTopicRequest{Name: "TestTopic"})
@@ -77,4 +82,26 @@ func main() {
 		fmt.Printf("%v with %d likes\n", message, message.Likes)
 		// }
 	}
+
+	stream, err := grpcClient.SubscribeTopic(context.Background(),
+		&razp.SubscribeTopicRequest{TopicId: 1, UserId: newUser.Id},
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go func() {
+		for {
+			ev, err := stream.Recv()
+			if err != nil {
+				fmt.Println("subscription ended:", err)
+				return
+			}
+			fmt.Printf("[LIVE] topic=%d: %s\n", ev.Message.TopicId, ev.Message.Text)
+		}
+	}()
+
+	fmt.Println("Subscribed. Press ENTER to quit.")
+	bufio.NewReader(os.Stdin).ReadBytes('\n')
+
 }
