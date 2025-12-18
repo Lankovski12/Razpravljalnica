@@ -37,19 +37,22 @@ import (
 )
 
 var (
-	port                     = flag.Int("port", 50051, "The server port")
-	numOfUsers         int64 = 0
-	numOfTopics        int64 = 0
-	users                    = make([]*razp.User, 0, 10)
-	topics                   = make([]*razp.Topic, 0, 10)     //
-	topicMessages            = make([][]*razp.Message, 0, 10) //[topicId][messageId]
-	topicSubscriptions       = make([][]*razp.User, 0, 10)    //[topicId][userId]
-	likes                    = make([][][]bool, 10)           // [topicId][messageId][userId]
-	first              bool  = true
-	userMu             sync.RWMutex
-	topicMu            sync.RWMutex
-	messageMu          sync.RWMutex
-	likeMu             sync.RWMutex
+	port                = flag.Int("port", 50051, "The server port")
+	numOfUsers    int64 = 0
+	numOfTopics   int64 = 0
+	users               = make([]*razp.User, 0, 10)
+	topics              = make([]*razp.Topic, 0, 10)     //
+	topicMessages       = make([][]*razp.Message, 0, 10) //[topicId][messageId]
+	likes               = make([][][]bool, 10)           // [topicId][messageId][userId]
+	first         bool  = true
+	topicSubsCh         = make([]map[int]chan *razp.MessageEvent, 0, 10)
+	userMu        sync.RWMutex
+	topicMu       sync.RWMutex
+	messageMu     sync.RWMutex
+	likeMu        sync.RWMutex
+	subMu         sync.RWMutex
+	nextSubID     int
+	seqNumber     int64 = 0
 )
 
 type server struct {
@@ -127,8 +130,8 @@ func (s *server) FindUser(_ context.Context, in *razp.FindUserRequest) (*razp.Us
 }
 
 func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*razp.Topic, error) {
-	lockWrite(&topicMu, &messageMu)
-	defer unlockWrite(&topicMu, &messageMu)
+	lockWrite(&topicMu, &messageMu, &subMu)
+	defer unlockWrite(&topicMu, &messageMu, &subMu)
 	newTopicName := in.Name
 	if numOfTopics != 0 {
 		// fmt.Print("tsets")
@@ -146,6 +149,7 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 	topics = append(topics, newTopic)
 
 	topicMessages = append(topicMessages, make([]*razp.Message, 0, 10))
+	topicSubsCh = append(topicSubsCh, make(map[int]chan *razp.MessageEvent))
 
 	fmt.Printf("Added New Topic, Id:%d Name: %s\n", newTopic.Id, newTopic.Name)
 
@@ -160,6 +164,14 @@ func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*r
 	currentTime := timestamppb.Now()
 	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
 	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
+
+	publishToTopic(topicIdx, &razp.MessageEvent{
+		SequenceNumber: seqNumber,
+		Op:             razp.OpType_OP_POST,
+		Message:        newMessage,
+		EventAt:        timestamppb.Now(),
+	})
+	seqNumber += 1
 
 	return newMessage, nil
 }
@@ -289,8 +301,114 @@ func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (
 }
 
 func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.ServerStreamingServer[razp.MessageEvent]) error {
-	return nil
+
+	if in.TopicId <= 0 {
+		return status.Error(codes.InvalidArgument, "TopicId must be >= 1")
+	}
+	topicMu.RLock()
+	topicCount := numOfTopics
+	topicMu.RUnlock()
+	if in.TopicId > topicCount {
+		return status.Error(codes.NotFound, "This topicID does not exist")
+	}
+	t := int(in.TopicId - 1)
+
+	// create channel for this subscriber
+	ch := make(chan *razp.MessageEvent, 256)
+
+	// register
+	subMu.Lock()
+	if t >= len(topicSubsCh) {
+		subMu.Unlock()
+		return status.Error(codes.Aborted, "This topicID does not exist")
+	}
+	id := nextSubID
+	nextSubID++
+	topicSubsCh[t][id] = ch
+	subMu.Unlock()
+
+	// cleanup on disconnect
+	defer func() {
+		subMu.Lock()
+		delete(topicSubsCh[t], id)
+		subMu.Unlock()
+		close(ch)
+	}()
+
+	ctx := stream.Context()
+
+	messageMu.RLock()
+	msgs := append([]*razp.Message(nil), topicMessages[t]...) // snapshot
+	messageMu.RUnlock()
+
+	start := int64(0)
+	if in.FromMessageId > 0 {
+		start = in.FromMessageId - 1
+	}
+	if start > int64(len(msgs)) {
+		start = int64(len(msgs))
+	}
+
+	// replay as OP_POST events (sequence number can just be message.Id)
+	for i := start; i < int64(len(msgs)); i++ {
+		m := msgs[i]
+		if m == nil {
+			continue
+		}
+		ev := &razp.MessageEvent{
+			SequenceNumber: m.Id, // replay without touching global seq
+			Op:             razp.OpType_OP_POST,
+			Message:        m,
+			EventAt:        m.CreatedAt,
+		}
+		if err := stream.Send(ev); err != nil {
+			return err
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev := <-ch:
+			if err := stream.Send(ev); err != nil {
+				return err
+			}
+		}
+	}
 }
+
+func publishToTopic(topicIdx int64, ev *razp.MessageEvent) {
+	subMu.RLock()
+	subs, ok := func() (map[int]chan *razp.MessageEvent, bool) {
+		if topicIdx < 0 || topicIdx >= int64(len(topicSubsCh)) {
+			return nil, false
+		}
+		return topicSubsCh[topicIdx], true
+	}()
+	if !ok {
+		subMu.RUnlock()
+		return
+	}
+
+	// copy channels so we don't hold subMu while sending
+	chans := make([]chan *razp.MessageEvent, 0, len(subs))
+	for _, ch := range subs {
+		chans = append(chans, ch)
+	}
+	subMu.RUnlock()
+
+	// non-blocking send
+	for _, ch := range chans {
+		select {
+		case ch <- ev:
+		default:
+			// drop if slow subscriber
+		}
+	}
+}
+
+// helper function
 
 func main() {
 	flag.Parse()
