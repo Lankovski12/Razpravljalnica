@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 
 	razp "razpravljalnica/razpravljalnica"
 
@@ -45,19 +46,51 @@ var (
 	topicSubscriptions       = make([][]*razp.User, 0, 10)    //[topicId][userId]
 	likes                    = make([][][]bool, 10)           // [topicId][messageId][userId]
 	first              bool  = true
+	userMu             sync.RWMutex
+	topicMu            sync.RWMutex
+	messageMu          sync.RWMutex
+	likeMu             sync.RWMutex
 )
 
 type server struct {
 	razp.UnimplementedMessageBoardServer
 }
 
-func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*razp.User, error) {
+func lockWrite(l ...*sync.RWMutex) {
+	for _, mu := range l {
+		mu.Lock()
+	}
+}
 
+func unlockWrite(l ...*sync.RWMutex) {
+	for i := len(l) - 1; i >= 0; i-- {
+		l[i].Unlock()
+	}
+}
+
+func lockRead(l ...*sync.RWMutex) {
+	for _, mu := range l {
+		mu.RLock()
+	}
+}
+
+func unlockRead(l ...*sync.RWMutex) {
+	for i := len(l) - 1; i >= 0; i-- {
+		l[i].RUnlock()
+	}
+}
+
+//support functions for mutex
+
+func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*razp.User, error) {
+	userMu.Lock()
+	defer userMu.Unlock()
 	newUserName := in.Name
 	newPassword := in.Password
 	if numOfUsers != 0 {
 		for _, user := range users {
 			if user.Name == newUserName {
+
 				return nil, status.Errorf(codes.Aborted, "User with same name already exists, please choose a different name")
 				// ne izpise errorja plus poglej ce se da to mogoce nrdit tak da avtomatsko relauncha request za CreateUser verjetno rabim v clientu se enkrat callat
 			}
@@ -76,6 +109,8 @@ func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*raz
 }
 
 func (s *server) FindUser(_ context.Context, in *razp.FindUserRequest) (*razp.User, error) {
+	userMu.RLock()
+	defer userMu.RUnlock()
 	userName := in.Name
 	userPass := in.Password
 
@@ -92,21 +127,21 @@ func (s *server) FindUser(_ context.Context, in *razp.FindUserRequest) (*razp.Us
 }
 
 func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*razp.Topic, error) {
-
+	lockWrite(&topicMu, &messageMu)
+	defer unlockWrite(&topicMu, &messageMu)
 	newTopicName := in.Name
-
 	if numOfTopics != 0 {
 		// fmt.Print("tsets")
 		for _, topic := range topics {
 			if topic.Name == newTopicName {
-				return nil, status.Error(codes.Aborted, "Topic with same name already exists, please choose a different name")
+				return nil, status.Errorf(codes.Aborted, "Topic with same name already exists, please choose a different name")
 				// ne izpise errorja ampak ga poslje, lahka si ga pol printas ce hoces
 				// plus poglej ce se da to mogoce nrdit tak da avtomatsko relauncha request za CreateUser verjetno rabim v clientu se enkrat callat
 			}
 		}
 	}
 
-	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName, NumberOfMessage: 0}
+	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName}
 	numOfTopics += 1
 	topics = append(topics, newTopic)
 
@@ -118,23 +153,24 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 }
 
 func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*razp.Message, error) {
-
+	messageMu.Lock()
+	defer messageMu.Unlock()
 	topicIdx := in.TopicId - 1
-	numOfTopicMessages := topics[topicIdx].NumberOfMessage
+	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
 	currentTime := timestamppb.Now()
 	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
-	topics[topicIdx].NumberOfMessage += 1
 	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
 
 	return newMessage, nil
 }
 
 func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*razp.GetMessagesResponse, error) {
-
 	// implementi linked list za messages al pa ne sj nvm probi zdle array/slice pa bomo pol fixal ce bo treba
+	lockRead(&topicMu, &messageMu)
+	defer unlockRead(&topicMu, &messageMu)
 	topicIdx := in.TopicId - 1
-	numOfTopicMessages := topics[topicIdx].NumberOfMessage
-	if in.TopicId > numOfTopics {
+	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
+	if topicIdx >= numOfTopics {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
@@ -142,7 +178,6 @@ func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*r
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 	// ce je messageId prevlek ne bo delal
-	var messageInterval []*razp.Message = topicMessages[topicIdx][:]
 	var leftInterval int64
 	var rightInterval int64
 	if in.Limit+int32(in.FromMessageId) > int32(numOfTopicMessages) {
@@ -153,7 +188,7 @@ func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*r
 		rightInterval = in.FromMessageId + int64(in.Limit)
 	}
 
-	messageInterval = messageInterval[leftInterval:rightInterval]
+	messageInterval := append([]*razp.Message(nil), topicMessages[topicIdx][leftInterval:rightInterval]...)
 	// fmt.Printf("LeftInterval:%d RightInterval:%d", leftInterval, rightInterval)
 	newGetMessagesResponse := &razp.GetMessagesResponse{Messages: messageInterval}
 
@@ -161,21 +196,25 @@ func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*r
 }
 
 func (s *server) ListTopics(_ context.Context, empty *emptypb.Empty) (*razp.ListTopicsResponse, error) {
-	var allTopics []*razp.Topic = topics[:]
+	topicMu.RLock()
+	defer topicMu.RUnlock()
+	allTopics := append([]*razp.Topic(nil), topics...)
 	newListTopicsResponse := &razp.ListTopicsResponse{Topics: allTopics}
 
 	return newListTopicsResponse, nil
 }
 
 func (s *server) UpdateMessage(ctx context.Context, in *razp.UpdateMessageRequest) (*razp.Message, error) {
+	lockWrite(&messageMu, &likeMu)
+	defer unlockWrite(&messageMu, &likeMu)
 	topicIdx := in.TopicId - 1
 	messageIdx := in.MessageId - 1
 
-	if topicIdx > numOfTopics {
+	if topicIdx >= numOfTopics {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
-	if messageIdx > topics[topicIdx].NumberOfMessage {
+	if messageIdx >= int64(len(topicMessages[topicIdx])) {
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 
@@ -195,14 +234,16 @@ func (s *server) UpdateMessage(ctx context.Context, in *razp.UpdateMessageReques
 }
 
 func (s *server) DeleteMessage(ctx context.Context, in *razp.DeleteMessageRequest) (*emptypb.Empty, error) {
+	lockWrite(&messageMu, &likeMu)
+	defer unlockWrite(&messageMu, &likeMu)
 	topicIdx := in.TopicId - 1
 	messageIdx := in.MessageId - 1
 
-	if topicIdx > numOfTopics {
+	if topicIdx >= numOfTopics {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
-	if messageIdx > topics[topicIdx].NumberOfMessage {
+	if messageIdx >= int64(len(topicMessages[topicIdx])) {
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 
@@ -219,25 +260,16 @@ func (s *server) DeleteMessage(ctx context.Context, in *razp.DeleteMessageReques
 }
 
 func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (*razp.Message, error) {
-
-	if first {
-		for t := 0; t < 10; t++ { // to sm ze zgori inicializiru
-			likes[t] = make([][]bool, 50)
-			for m := 0; m < 50; m++ {
-				likes[t][m] = make([]bool, 20) // initialization za 10 topicov vsak 50 messageov in vsakih 50 msg 20 userev (10 * 50 * 20)
-			}
-		}
-		first = false
-	}
-
+	lockWrite(&messageMu, &likeMu)
+	defer unlockWrite(&messageMu, &likeMu)
 	topicIdx := in.TopicId - 1
 	messageIdx := in.MessageId - 1
 
-	if topicIdx > numOfTopics {
+	if topicIdx >= numOfTopics {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
-	if messageIdx > topics[topicIdx].NumberOfMessage {
+	if messageIdx >= int64(len(topicMessages[topicIdx])) {
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 
@@ -267,6 +299,15 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
+	if first {
+		for t := 0; t < 10; t++ { // to sm ze zgori inicializiru
+			likes[t] = make([][]bool, 50)
+			for m := 0; m < 50; m++ {
+				likes[t][m] = make([]bool, 20) // initialization za 10 topicov vsak 50 messageov in vsakih 50 msg 20 userev (10 * 50 * 20)
+			}
+		}
+		first = false
+	}
 	razp.RegisterMessageBoardServer(s, &server{})
 	log.Printf("server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
