@@ -71,6 +71,8 @@ func unlockWrite(l ...*sync.RWMutex) {
 	}
 }
 
+//support functions for mutex (writes)
+
 func lockRead(l ...*sync.RWMutex) {
 	for _, mu := range l {
 		mu.RLock()
@@ -83,7 +85,7 @@ func unlockRead(l ...*sync.RWMutex) {
 	}
 }
 
-//support functions for mutex
+//support functions for mutex (reads)
 
 func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*razp.User, error) {
 	userMu.Lock()
@@ -93,7 +95,6 @@ func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*raz
 	if numOfUsers != 0 {
 		for _, user := range users {
 			if user.Name == newUserName {
-
 				return nil, status.Errorf(codes.Aborted, "User with same name already exists, please choose a different name")
 				// ne izpise errorja plus poglej ce se da to mogoce nrdit tak da avtomatsko relauncha request za CreateUser verjetno rabim v clientu se enkrat callat
 			}
@@ -147,7 +148,7 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName}
 	numOfTopics += 1
 	topics = append(topics, newTopic)
-
+	// ustvari topic in ga dodaj v global tabelo in dodaj kanal za subscription
 	topicMessages = append(topicMessages, make([]*razp.Message, 0, 10))
 	topicSubsCh = append(topicSubsCh, make(map[int]chan *razp.MessageEvent))
 
@@ -165,6 +166,8 @@ func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*r
 	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
 	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
 
+	// dodaj message v globalno tabelo sporocil
+
 	publishToTopic(topicIdx, &razp.MessageEvent{
 		SequenceNumber: seqNumber,
 		Op:             razp.OpType_OP_POST,
@@ -172,6 +175,8 @@ func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*r
 		EventAt:        timestamppb.Now(),
 	})
 	seqNumber += 1
+
+	// funkcija za subscription ki
 
 	return newMessage, nil
 }
@@ -201,9 +206,10 @@ func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*r
 	}
 
 	messageInterval := append([]*razp.Message(nil), topicMessages[topicIdx][leftInterval:rightInterval]...)
+	// doda message v globalno tabelo sporocil
 	// fmt.Printf("LeftInterval:%d RightInterval:%d", leftInterval, rightInterval)
 	newGetMessagesResponse := &razp.GetMessagesResponse{Messages: messageInterval}
-
+	// in naredi response zato da ga vrnemo
 	return newGetMessagesResponse, nil
 }
 
@@ -212,7 +218,7 @@ func (s *server) ListTopics(_ context.Context, empty *emptypb.Empty) (*razp.List
 	defer topicMu.RUnlock()
 	allTopics := append([]*razp.Topic(nil), topics...)
 	newListTopicsResponse := &razp.ListTopicsResponse{Topics: allTopics}
-
+	// vrne tabelo vseh topicov
 	return newListTopicsResponse, nil
 }
 
@@ -238,10 +244,17 @@ func (s *server) UpdateMessage(ctx context.Context, in *razp.UpdateMessageReques
 		return nil, status.Error(codes.Aborted, "This message can only be edited by the author")
 	}
 
+	// napake ki nam lahko povzrocijo tezave ali nedovoljene dostope
+
 	topicMessages[topicIdx][messageIdx].Text = in.Text
 	topicMessages[topicIdx][messageIdx].CreatedAt = timestamppb.Now()
 
+	// popravek v globalni tabeli
+
 	returnMessage := topicMessages[topicIdx][messageIdx]
+
+	// struct ki ga vrnemo
+
 	return returnMessage, nil
 }
 
@@ -263,10 +276,14 @@ func (s *server) DeleteMessage(ctx context.Context, in *razp.DeleteMessageReques
 		return nil, status.Error(codes.Aborted, "This message can only be deleted by the author")
 	}
 
+	// napake ki nam lahko povzrocijo tezave ali nedovoljene dostope
+
 	topicMessages[topicIdx][messageIdx].TopicId = -1
 	topicMessages[topicIdx][messageIdx].UserId = -1
 	topicMessages[topicIdx][messageIdx].Likes = -1
 	topicMessages[topicIdx][messageIdx].Text = "message deleted by user"
+
+	// fake brisanje, dejansko samo zamenjamo vse na neveljavne vrednosti
 
 	return nil, nil
 }
@@ -285,9 +302,11 @@ func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 
-	if topicMessages[topicIdx][messageIdx] == nil {
+	if topicMessages[topicIdx][messageIdx].Text == "message deleted by user" {
 		return nil, status.Error(codes.Aborted, "This message was deleted by the author")
 	}
+
+	// napake ki nam lahko povzrocijo tezave ali nedovoljene dostope
 
 	likes[topicIdx][messageIdx][in.UserId] = !likes[topicIdx][messageIdx][in.UserId]
 	if likes[topicIdx][messageIdx][in.UserId] {
@@ -295,6 +314,8 @@ func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (
 	} else {
 		topicMessages[topicIdx][messageIdx].Likes -= 1
 	}
+
+	// dodamo zapis v boolean tabelo likeov in inkrementira vrednost v tabeli sporocil
 
 	returnMessage := topicMessages[topicIdx][messageIdx]
 	return returnMessage, nil
@@ -313,10 +334,11 @@ func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.Serv
 	}
 	t := int(in.TopicId - 1)
 
-	// create channel for this subscriber
+	// napake ki nam lahko povzrocijo tezave ali nedovoljene dostope
+
+	// ustvari kanal za subscriberja
 	ch := make(chan *razp.MessageEvent, 256)
 
-	// register
 	subMu.Lock()
 	if t >= len(topicSubsCh) {
 		subMu.Unlock()
@@ -327,13 +349,15 @@ func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.Serv
 	topicSubsCh[t][id] = ch
 	subMu.Unlock()
 
-	// cleanup on disconnect
+	// dodaj ga v map kanalov ki je per topic zato je vseeeno kaksen je subId ker
+
 	defer func() {
 		subMu.Lock()
 		delete(topicSubsCh[t], id)
 		subMu.Unlock()
 		close(ch)
 	}()
+	// zapremo kanal in ga odstranimo iz mapa ko se konca
 
 	ctx := stream.Context()
 
@@ -349,14 +373,13 @@ func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.Serv
 		start = int64(len(msgs))
 	}
 
-	// replay as OP_POST events (sequence number can just be message.Id)
 	for i := start; i < int64(len(msgs)); i++ {
 		m := msgs[i]
 		if m == nil {
 			continue
 		}
 		ev := &razp.MessageEvent{
-			SequenceNumber: m.Id, // replay without touching global seq
+			SequenceNumber: m.Id,
 			Op:             razp.OpType_OP_POST,
 			Message:        m,
 			EventAt:        m.CreatedAt,
@@ -366,6 +389,7 @@ func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.Serv
 		}
 	}
 
+	// od prejsnega commenta do tu je zato da from message id deluje previlno ker rabimo za nazaj tud poslat po kanalu ko se subscribeamo
 	for {
 		select {
 		case <-ctx.Done():
@@ -376,6 +400,7 @@ func (s *server) SubscribeTopic(in *razp.SubscribeTopicRequest, stream grpc.Serv
 			}
 		}
 	}
+	// za live posiljanje
 }
 
 func publishToTopic(topicIdx int64, ev *razp.MessageEvent) {
@@ -390,25 +415,26 @@ func publishToTopic(topicIdx int64, ev *razp.MessageEvent) {
 		subMu.RUnlock()
 		return
 	}
+	// vrne pointer na hrambo kanalov subscriptiona iz globalne tabele povezan z stevilko topica in vsakic ko dodamo novega
+	// v topicSubsCh bo pogledal ce je ze notri ker je map (to se zgodi ze v subscribe topic)
 
-	// copy channels so we don't hold subMu while sending
 	chans := make([]chan *razp.MessageEvent, 0, len(subs))
 	for _, ch := range subs {
 		chans = append(chans, ch)
 	}
 	subMu.RUnlock()
 
-	// non-blocking send
+	// doda lokalno kopijo vseh kanalov na topicu zato da nam ni treba obdrzati mutex basically doda vse previous v prazen je tist append
+
 	for _, ch := range chans {
 		select {
 		case ch <- ev:
 		default:
-			// drop if slow subscriber
+			// drop if slow
 		}
 	}
+	// posiljanje v kanal
 }
-
-// helper function
 
 func main() {
 	flag.Parse()
