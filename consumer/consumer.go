@@ -23,6 +23,8 @@ import (
 	//"bufio"
 	"context"
 	"flag"
+	"fmt"
+	"strings"
 	"time"
 
 	//"os"
@@ -33,6 +35,7 @@ import (
 	"github.com/rivo/tview"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -63,16 +66,44 @@ func main() {
 	loginBtn := tview.NewButton("Login")
 
 	choiceFlex := tview.NewFlex(). //zacetna stran
-		SetDirection(tview.FlexRow).
-		AddItem(title, 2, 1, false).
-		AddItem(tview.NewBox(), 1, 1, false).
-		AddItem(createBtn, 3, 1, true).
-		AddItem(loginBtn, 3, 1, false)
+					SetDirection(tview.FlexRow).
+					AddItem(title, 2, 1, false).
+					AddItem(tview.NewBox(), 1, 1, false).
+					AddItem(createBtn, 3, 1, true).
+					AddItem(loginBtn, 3, 1, false)
 	choiceFlex.SetBorder(true).SetTitle(" Welcome ")
 
 	usernameField := tview.NewInputField().SetLabel("Username: ").SetFieldWidth(20)
 	passwordField := tview.NewInputField().SetLabel("Password: ").SetMaskCharacter('*').SetFieldWidth(20)
 	createAccountButton := tview.NewButton("Create Account")
+
+	topicList := tview.NewList().
+		ShowSecondaryText(false)
+
+	createTopicBtn := tview.NewButton("Create Topic")
+	refreshBtn := tview.NewButton("Refresh Topics")
+
+	header := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(createTopicBtn, 0, 1, false).
+		AddItem(refreshBtn, 0, 1, false)
+
+	homeFlex := tview.NewFlex(). //spremeni v reddit like
+		SetDirection(tview.FlexRow).
+		AddItem(header, 3, 1, false).
+		AddItem(topicList, 0, 6, true).
+		AddItem(status, 1, 1, false)
+
+	homeFlex.SetBorder(true).SetTitle(" Topics ")
+
+	newTopicInput := tview.NewInputField().
+		SetLabel("Topic name: ").
+		SetFieldWidth(30)
+
+	createTopicModal := tview.NewModal(). //spremeni
+						AddButtons([]string{"Create", "Cancel"}).
+						SetText("Enter topic name").
+						SetBackgroundColor(tcell.ColorBlack)
 
 	createAccount := func() { //doda novega userja
 		name := usernameField.GetText()
@@ -103,6 +134,86 @@ func main() {
 		}()
 	}
 
+	loadTopics := func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := grpcClient.ListTopics(ctx, &emptypb.Empty{})
+			app.QueueUpdateDraw(func() {
+				topicList.Clear()
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText(err.Error())
+					return
+				}
+
+				for _, t := range resp.Topics {
+					topicList.AddItem(t.Name, "", 0, nil)
+				}
+
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText("Topics loaded")
+			})
+		}()
+	}
+
+	createTopic := func(name string) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			req := &razp.CreateTopicRequest{Name: name}
+
+			resp, err := grpcClient.CreateTopic(ctx, req)
+			app.QueueUpdateDraw(func() {
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText(err.Error())
+					return
+				}
+
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText(fmt.Sprintf("Topic '%s' created", resp.Name))
+
+				loadTopics()
+			})
+		}()
+	}
+
+	createTopicModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		if buttonLabel == "Create" {
+			name := newTopicInput.GetText()
+			name = strings.TrimSpace(name)
+			if name != "" {
+				createTopic(name)
+			} else {
+				status.SetTextColor(tcell.ColorRed)
+				status.SetText("Topic name cannot be empty")
+			}
+		}
+
+		// Zapri modal in se vrni na home
+		pages.HidePage("createTopicModal")
+		pages.SwitchToPage("home")
+		app.SetFocus(topicList)
+	})
+
+	refreshBtn.SetSelectedFunc(loadTopics)
+
+	createTopicBtn.SetSelectedFunc(func() {
+		newTopicInput.SetText("")
+
+		// modal mora vsebovati input field
+		modalFlex := tview.NewFlex().
+			SetDirection(tview.FlexRow).
+			AddItem(newTopicInput, 2, 1, true).
+			AddItem(createTopicModal, 0, 3, false)
+
+		pages.AddPage("createTopicModal", modalFlex, true, true)
+		app.SetFocus(newTopicInput)
+	})
+
 	createAccountButton.SetSelectedFunc(createAccount)
 
 	usernameField.SetDoneFunc(func(key tcell.Key) {
@@ -117,11 +228,11 @@ func main() {
 	})
 
 	signupFlex := tview.NewFlex(). //kjer si ustvaris nov account
-		SetDirection(tview.FlexRow).
-		AddItem(usernameField, 3, 1, true).
-		AddItem(passwordField, 3, 1, false).
-		AddItem(createAccountButton, 2, 1, false).
-		AddItem(status, 2, 1, false)
+					SetDirection(tview.FlexRow).
+					AddItem(usernameField, 3, 1, true).
+					AddItem(passwordField, 3, 1, false).
+					AddItem(createAccountButton, 2, 1, false).
+					AddItem(status, 2, 1, false)
 	signupFlex.SetBorder(true).SetTitle(" Sign Up ")
 
 	loginUsername := tview.NewInputField().SetLabel("Username: ").SetFieldWidth(20)
@@ -140,7 +251,7 @@ func main() {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //idk je pomembno sam nevem kak more bit
 				defer cancel()
 
-				_, err := grpcClient.FindUser(ctx, &razp.CreateUserRequest{
+				_, err := grpcClient.FindUser(ctx, &razp.FindUserRequest{
 					Name:     name,
 					Password: pass,
 				})
@@ -149,14 +260,16 @@ func main() {
 						status.SetTextColor(tcell.ColorRed)
 						status.SetText(err.Error())
 					} else {
-						status.SetTextColor(tcell.ColorYellow)
-						status.SetText("Logging in...")
+						status.SetTextColor(tcell.ColorGreen)
+						status.SetText("Login successful")
+
+						pages.SwitchToPage("home")
+						loadTopics()
+						app.SetFocus(topicList)
 					}
 				})
 			}()
 		}
-
-		// pokazi poste, pojdi na drug page
 	}
 
 	loginButton.SetSelectedFunc(loginFunc)
@@ -173,11 +286,11 @@ func main() {
 	})
 
 	loginFlex := tview.NewFlex(). //kjer se loggas in
-		SetDirection(tview.FlexRow).
-		AddItem(loginUsername, 3, 1, true).
-		AddItem(loginPassword, 3, 1, false).
-		AddItem(loginButton, 2, 1, false).
-		AddItem(status, 2, 1, false)
+					SetDirection(tview.FlexRow).
+					AddItem(loginUsername, 3, 1, true).
+					AddItem(loginPassword, 3, 1, false).
+					AddItem(loginButton, 2, 1, false).
+					AddItem(status, 2, 1, false)
 	loginFlex.SetBorder(true).SetTitle(" Login ")
 
 	createBtn.SetSelectedFunc(func() {
@@ -192,6 +305,7 @@ func main() {
 	pages.AddPage("choice", choiceFlex, true, true) //kako je na zacetku
 	pages.AddPage("signup", signupFlex, true, false)
 	pages.AddPage("login", loginFlex, true, false)
+	pages.AddPage("home", homeFlex, true, false)
 
 	app.SetRoot(pages, true).SetFocus(createBtn)
 

@@ -128,7 +128,7 @@ func main() {
 	loginPassword := tview.NewInputField().SetLabel("Password: ").SetMaskCharacter('*').SetFieldWidth(20)
 	loginButton := tview.NewButton("Login")
 
-	loginFunc := func() { //potrebno dodat funkcijo ki preveri ce je user ze not
+	loginFunc := func() {
 		name := loginUsername.GetText()
 		pass := loginPassword.GetText()
 		if name == "" || pass == "" {
