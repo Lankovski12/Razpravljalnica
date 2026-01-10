@@ -23,8 +23,6 @@ import (
 	//"bufio"
 	"context"
 	"flag"
-	"fmt"
-	"strings"
 	"time"
 
 	//"os"
@@ -40,7 +38,26 @@ import (
 
 var (
 	addr = flag.String("addr", "localhost:50051", "the address to connect to")
+
+	themeColorSec = tcell.ColorBlue
+
+	currentUserID   int64 = -1
+	currentUsername       = ""
 )
+
+/*func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn *tview.Button, themeColorSec tcell.Color) {
+	createAccountButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	backFromSignupBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	loginButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	backFromLoginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	refreshBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	profileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	createBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	loginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+
+	app.Draw()
+}*/
 
 func main() {
 	app := tview.NewApplication()
@@ -54,84 +71,243 @@ func main() {
 	grpcClient := razp.NewMessageBoardClient(conn)
 
 	pages := tview.NewPages()
-
 	status := tview.NewTextView().SetTextAlign(tview.AlignCenter)
 
-	title := tview.NewTextView().
-		SetText("Welcome to Razpravljalnici").
-		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tcell.ColorPink)
+	// SCREEN 1: CREATE ACCOUNT OR LOG IN
 
-	createBtn := tview.NewButton("Create Account")
+	createBtn := tview.NewButton("Create account")
+	createBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 	loginBtn := tview.NewButton("Login")
+	loginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	choiceFlex := tview.NewFlex(). //zacetna stran
-					SetDirection(tview.FlexRow).
-					AddItem(title, 2, 1, false).
-					AddItem(tview.NewBox(), 1, 1, false).
-					AddItem(createBtn, 3, 1, true).
-					AddItem(loginBtn, 3, 1, false)
+	//FLEX ZA GUMBA
+	buttonsColumn := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(createBtn, 3, 0, true).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(loginBtn, 3, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false)
+
+	//CENTRIRANO
+	buttonsFlex := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(buttonsColumn, 50, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false)
+
+	//GLAVNA STRUKTURA
+	choiceFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(buttonsFlex, 0, 1, true)
 	choiceFlex.SetBorder(true).SetTitle(" Welcome ")
 
+	// SCREEN 2: CREATE NEW ACCOUNT
+
 	usernameField := tview.NewInputField().SetLabel("Username: ").SetFieldWidth(20)
+	usernameField.SetLabelColor(tcell.ColorWhite)
+
 	passwordField := tview.NewInputField().SetLabel("Password: ").SetMaskCharacter('*').SetFieldWidth(20)
-	createAccountButton := tview.NewButton("Create Account")
+	passwordField.SetLabelColor(tcell.ColorWhite)
 
-	topicList := tview.NewList().
-		ShowSecondaryText(false)
+	createAccountButton := tview.NewButton("Create account")
+	createAccountButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-	createTopicBtn := tview.NewButton("Create Topic")
-	refreshBtn := tview.NewButton("Refresh Topics")
+	backFromSignupBtn := tview.NewButton("Back")
+	backFromSignupBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	header := tview.NewFlex().
+	//FLEX ZA GUMBA
+	signupButtonsRow := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(createTopicBtn, 0, 1, false).
-		AddItem(refreshBtn, 0, 1, false)
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(createAccountButton, 25, 0, false).
+		AddItem(tview.NewBox(), 0, 0, false).
+		AddItem(backFromSignupBtn, 25, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false)
 
-	homeFlex := tview.NewFlex(). //spremeni v reddit like
+	//GLAVNA STRUKTURA
+	signupFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(header, 3, 1, false).
-		AddItem(topicList, 0, 6, true).
-		AddItem(status, 1, 1, false)
+		AddItem(usernameField, 3, 1, true).
+		AddItem(passwordField, 3, 1, false).
+		AddItem(tview.NewBox(), 2, 0, false).
+		AddItem(signupButtonsRow, 3, 0, false).
+		AddItem(status, 2, 1, false)
+	signupFlex.SetBorder(true).SetTitle(" Sign Up ")
 
-	homeFlex.SetBorder(true).SetTitle(" Topics ")
+	//SCREEN 3: LOGIN SCREEN
+
+	loginUsername := tview.NewInputField().SetLabel("Username: ").SetFieldWidth(20)
+	loginUsername.SetLabelColor(tcell.ColorWhite)
+
+	loginPassword := tview.NewInputField().SetLabel("Password: ").SetMaskCharacter('*').SetFieldWidth(20)
+	loginPassword.SetLabelColor(tcell.ColorWhite)
+
+	loginButton := tview.NewButton("Login")
+	loginButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+
+	backFromLoginBtn := tview.NewButton("Back")
+	backFromLoginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+
+	//Flex za gumba
+	loginButtonsRow := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(loginButton, 25, 0, false).
+		AddItem(tview.NewBox(), 0, 0, false).
+		AddItem(backFromLoginBtn, 25, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false)
+
+	//GLAVNA STRUKTURA
+	loginFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(loginUsername, 3, 1, true).
+		AddItem(loginPassword, 3, 1, false).
+		AddItem(tview.NewBox(), 2, 0, false).
+		AddItem(loginButtonsRow, 3, 0, false).
+		AddItem(status, 2, 1, false)
+	loginFlex.SetBorder(true).SetTitle(" Login ")
+
+	//SCREEN 4: MAIN PAGE
+
+	topicList := tview.NewList().ShowSecondaryText(false)
+	messagesList := tview.NewList().ShowSecondaryText(false)
 
 	newTopicInput := tview.NewInputField().
-		SetLabel("Topic name: ").
-		SetFieldWidth(30)
+		SetLabel("New topic: ").
+		SetFieldWidth(20)
+	newTopicInput.SetLabelColor(tcell.ColorWhite)
+	newTopicInput.SetFieldTextColor(tcell.ColorWhite)
 
-	createTopicModal := tview.NewModal(). //spremeni
-						AddButtons([]string{"Create", "Cancel"}).
-						SetText("Enter topic name").
-						SetBackgroundColor(tcell.ColorBlack)
+	createTopicBtn := tview.NewButton("Create topic")
+	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	createAccount := func() { //doda novega userja
-		name := usernameField.GetText()
-		pass := passwordField.GetText()
-		if name == "" || pass == "" { //potrebno dodati funkcijo ki preverja kako korekten je input
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Username and password required")
-			return
-		}
+	refreshBtn := tview.NewButton("Refresh page")
+	refreshBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //idk je pomembno sam nevem kak more bit
-			defer cancel()
+	profileBtn := tview.NewButton("My profile")
+	profileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-			_, err := grpcClient.CreateUser(ctx, &razp.CreateUserRequest{
-				Name:     name,
-				Password: pass,
-			})
-			app.QueueUpdateDraw(func() {
-				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText(err.Error())
-				} else {
-					status.SetTextColor(tcell.ColorGreen)
-					status.SetText("Account created successfully")
-				}
-			})
-		}()
+	inputFlex := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(newTopicInput, 0, 6, false).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(createTopicBtn, 0, 3, false)
+
+	//FLEX ZA GUMBE
+	leva := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(profileBtn, 0, 4, false).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(refreshBtn, 0, 4, false).
+		AddItem(tview.NewBox(), 0, 1, false)
+
+	topicPanel := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(topicList, 0, 15, false).
+		AddItem(inputFlex, 0, 1, false).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(leva, 0, 1, false)
+	topicPanel.SetBorder(true).SetTitle(" Topics ")
+
+	messagesPanel := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(tview.NewTextView().SetText("Home:").SetTextAlign(tview.AlignCenter), 1, 0, false).
+		AddItem(messagesList, 0, 1, false).
+		AddItem(status, 2, 0, false)
+
+	contentFlex := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(topicPanel, 0, 1, false).
+		AddItem(messagesPanel, 0, 3, false)
+
+	//SCREEN 5: PROFILE
+
+	profileUsernameDisplay := tview.NewTextView().
+		SetText("Username: " + currentUsername).
+		SetTextAlign(tview.AlignLeft)
+	profileUsernameDisplay.SetTextColor(tcell.ColorWhite)
+
+	// PROFILE SCREEN - Change password fields
+	profileOldPassword := tview.NewInputField().
+		SetLabel("Old password: ").
+		SetMaskCharacter('*').
+		SetFieldWidth(20)
+	profileOldPassword.SetLabelColor(tcell.ColorWhite)
+	profileOldPassword.SetFieldTextColor(tcell.ColorWhite)
+
+	profileNewPassword := tview.NewInputField().
+		SetLabel("New password: ").
+		SetMaskCharacter('*').
+		SetFieldWidth(20)
+	profileNewPassword.SetLabelColor(tcell.ColorWhite)
+	profileNewPassword.SetFieldTextColor(tcell.ColorWhite)
+
+	// PROFILE SCREEN - Theme selector (dropdown)
+	dropdown := tview.NewDropDown().
+		SetLabel("Theme: ").
+		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, func(option string, optionIndex int) {
+			// Ko izbereš temo, nastavi ustrezne barve
+			switch option {
+			case "Pink":
+				themeColorSec = tcell.ColorPink
+			case "Green":
+				themeColorSec = tcell.ColorGreen
+			case "Orange":
+				themeColorSec = tcell.ColorOrange
+			case "Blue":
+				themeColorSec = tcell.ColorBlue
+			case "Red":
+				themeColorSec = tcell.ColorRed
+			case "Violet":
+				themeColorSec = tcell.ColorPaleVioletRed
+			}
+			/*updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn, themeColorSec)*/
+		})
+	dropdown.SetLabelColor(tcell.ColorWhite)
+
+	changePasswordBtn := tview.NewButton("Change Password")
+	changePasswordBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorGreen))
+
+	// PROFILE SCREEN - Back button
+	backFromProfileBtn := tview.NewButton("Back")
+	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorRed))
+
+	usernameDisplayFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(profileUsernameDisplay, 2, 0, false)
+
+	// PROFILE SCREEN - Buttons flex
+	profileButtonsRow := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(changePasswordBtn, 18, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false).
+		AddItem(backFromProfileBtn, 8, 0, false).
+		AddItem(tview.NewBox(), 0, 1, false)
+
+	// PROFILE SCREEN - Main structure
+	profileFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(tview.NewTextView().SetText("My Profile").SetTextAlign(tview.AlignCenter), 2, 0, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(usernameDisplayFlex, 2, 0, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(dropdown, 2, 0, false).
+		AddItem(tview.NewBox(), 2, 0, false).
+		AddItem(profileOldPassword, 3, 0, false).
+		AddItem(profileNewPassword, 3, 0, false).
+		AddItem(tview.NewBox(), 1, 0, false).
+		AddItem(profileButtonsRow, 3, 0, false).
+		AddItem(status, 2, 0, false)
+	profileFlex.SetBorder(true).SetTitle(" Profile ")
+
+	//FUNKCIJE
+
+	//FUNKCIJA KI NALOZI VSE TOPICS
+	updateProfileDisplay := func() {
+		profileUsernameDisplay.SetText("Username: " + currentUsername)
 	}
 
 	loadTopics := func() {
@@ -152,15 +328,46 @@ func main() {
 					topicList.AddItem(t.Name, "", 0, nil)
 				}
 
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText("Topics loaded")
 			})
 		}()
 	}
 
+	//FUNKCIJA KI USTVARI NOVEGA UPORABNIKA
+	createAccount := func() { //doda novega userja
+		name := usernameField.GetText()
+		pass := passwordField.GetText()
+		if name == "" || pass == "" { //potrebno dodati funkcijo ki preverja kako korekten je input
+			status.SetTextColor(tcell.ColorRed)
+			status.SetText("Username and password required")
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //idk je pomembno sam nevem kak more bit
+			defer cancel()
+
+			raz, err := grpcClient.CreateUser(ctx, &razp.CreateUserRequest{
+				Name:     name,
+				Password: pass,
+			})
+			app.QueueUpdateDraw(func() {
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText("Account with that username already exist")
+				} else {
+					currentUsername = name
+					currentUserID = raz.Id
+					pages.SwitchToPage("home")
+					loadTopics()
+					app.SetFocus(topicList)
+				}
+			})
+		}()
+	}
+
+	//FUNKCIJA KI USTVARI NOV TOPIC
 	createTopic := func(name string) {
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
 			req := &razp.CreateTopicRequest{Name: name}
@@ -169,77 +376,22 @@ func main() {
 			app.QueueUpdateDraw(func() {
 				if err != nil {
 					status.SetTextColor(tcell.ColorRed)
-					status.SetText(err.Error())
+					status.SetText("Topic with same name already exists, please choose a different name")
 					return
 				}
 
 				status.SetTextColor(tcell.ColorGreen)
-				status.SetText(fmt.Sprintf("Topic '%s' created", resp.Name))
+				status.SetText("Topic '" + resp.Name + "' created successfully")
+
+				newTopicInput.SetText("")
 
 				loadTopics()
 			})
 		}()
 	}
 
-	createTopicModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		if buttonLabel == "Create" {
-			name := newTopicInput.GetText()
-			name = strings.TrimSpace(name)
-			if name != "" {
-				createTopic(name)
-			} else {
-				status.SetTextColor(tcell.ColorRed)
-				status.SetText("Topic name cannot be empty")
-			}
-		}
-
-		// Zapri modal in se vrni na home
-		pages.HidePage("createTopicModal")
-		pages.SwitchToPage("home")
-		app.SetFocus(topicList)
-	})
-
-	refreshBtn.SetSelectedFunc(loadTopics)
-
-	createTopicBtn.SetSelectedFunc(func() {
-		newTopicInput.SetText("")
-
-		// modal mora vsebovati input field
-		modalFlex := tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(newTopicInput, 2, 1, true).
-			AddItem(createTopicModal, 0, 3, false)
-
-		pages.AddPage("createTopicModal", modalFlex, true, true)
-		app.SetFocus(newTopicInput)
-	})
-
-	createAccountButton.SetSelectedFunc(createAccount)
-
-	usernameField.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			app.SetFocus(passwordField)
-		}
-	})
-	passwordField.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			createAccount()
-		}
-	})
-
-	signupFlex := tview.NewFlex(). //kjer si ustvaris nov account
-					SetDirection(tview.FlexRow).
-					AddItem(usernameField, 3, 1, true).
-					AddItem(passwordField, 3, 1, false).
-					AddItem(createAccountButton, 2, 1, false).
-					AddItem(status, 2, 1, false)
-	signupFlex.SetBorder(true).SetTitle(" Sign Up ")
-
-	loginUsername := tview.NewInputField().SetLabel("Username: ").SetFieldWidth(20)
-	loginPassword := tview.NewInputField().SetLabel("Password: ").SetMaskCharacter('*').SetFieldWidth(20)
-	loginButton := tview.NewButton("Login")
-
-	loginFunc := func() { //potrebno dodat funkcijo ki preveri ce je user ze not
+	//FUNKCIJA KI TE VPISE
+	loginFunc := func() {
 		name := loginUsername.GetText()
 		pass := loginPassword.GetText()
 		if name == "" || pass == "" {
@@ -251,62 +403,132 @@ func main() {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) //idk je pomembno sam nevem kak more bit
 				defer cancel()
 
-				_, err := grpcClient.FindUser(ctx, &razp.FindUserRequest{
+				raz, err := grpcClient.FindUser(ctx, &razp.FindUserRequest{
 					Name:     name,
 					Password: pass,
 				})
 				app.QueueUpdateDraw(func() {
 					if err != nil {
 						status.SetTextColor(tcell.ColorRed)
-						status.SetText(err.Error())
+						status.SetText("Password does not match the username")
 					} else {
-						status.SetTextColor(tcell.ColorGreen)
-						status.SetText("Login successful")
-
+						currentUserID = raz.Id
+						currentUsername = name
 						pages.SwitchToPage("home")
 						loadTopics()
-						app.SetFocus(topicList)
 					}
 				})
 			}()
 		}
 	}
 
+	// FUNKCIJE ZA GUMBE
+
+	//CREATE ACCOUNT POJDI NA CREATE ACCOUNT SCREEN
+	createBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("signup")
+		app.SetFocus(usernameField)
+	})
+
+	//LOGIN POJDI NA LOGIN SCREEN
+	loginBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("login")
+		app.SetFocus(loginUsername)
+	})
+
+	//USTVARI RACUN
+	createAccountButton.SetSelectedFunc(createAccount)
+
+	//BACK GUMB POJDI NAZAJ NA ZACETEK
+	backFromSignupBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("choice")
+	})
+
+	backFromLoginBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("choice")
+	})
+
+	backFromProfileBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("home")
+	})
+
+	//PRIJAVI SE
 	loginButton.SetSelectedFunc(loginFunc)
 
+	//OSVEZI TOPICS
+	refreshBtn.SetSelectedFunc(loadTopics)
+
+	profileBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("profile")
+	})
+
+	profileBtn.SetSelectedFunc(func() {
+		updateProfileDisplay()
+		pages.SwitchToPage("profile")
+		app.SetFocus(dropdown)
+	})
+
+	//USTAVRI NOW TOPIC
+	createTopicBtn.SetSelectedFunc(func() {
+		topicName := newTopicInput.GetText()
+		if topicName == "" {
+			status.SetTextColor(tcell.ColorRed)
+			status.SetText("Topic name cannot be empty")
+			return
+		}
+		createTopic(topicName)
+	})
+
+	//ČE PRITISNEMO ENTER
+
+	//USERNAME->PASSWORD
+	usernameField.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			app.SetFocus(passwordField)
+		}
+	})
+
+	//PASSWORD->USTVARI RACUN
+	passwordField.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			createAccount()
+		}
+	})
+
+	//USERNAME->PASSWORD PRI LOGIN
 	loginUsername.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			app.SetFocus(loginPassword)
 		}
 	})
+
+	//PASSWORD->PRIJAVI SE
 	loginPassword.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			loginFunc()
 		}
 	})
 
-	loginFlex := tview.NewFlex(). //kjer se loggas in
-					SetDirection(tview.FlexRow).
-					AddItem(loginUsername, 3, 1, true).
-					AddItem(loginPassword, 3, 1, false).
-					AddItem(loginButton, 2, 1, false).
-					AddItem(status, 2, 1, false)
-	loginFlex.SetBorder(true).SetTitle(" Login ")
-
-	createBtn.SetSelectedFunc(func() {
-		pages.SwitchToPage("signup")
-		app.SetFocus(usernameField)
-	})
-	loginBtn.SetSelectedFunc(func() {
-		pages.SwitchToPage("login")
-		app.SetFocus(loginUsername)
+	newTopicInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			topicName := newTopicInput.GetText()
+			if topicName == "" {
+				status.SetTextColor(tcell.ColorRed)
+				status.SetText("Topic name cannot be empty")
+				return
+			}
+			createTopic(topicName)
+		}
 	})
 
-	pages.AddPage("choice", choiceFlex, true, true) //kako je na zacetku
+	//REGISTTRIRAMO SCREENE
+	pages.AddPage("choice", choiceFlex, true, true)
 	pages.AddPage("signup", signupFlex, true, false)
 	pages.AddPage("login", loginFlex, true, false)
-	pages.AddPage("home", homeFlex, true, false)
+	pages.AddPage("home", contentFlex, true, false)
+	pages.AddPage("profile", profileFlex, true, false)
 
+	//ZACNI APLIKACIJO
 	app.SetRoot(pages, true).SetFocus(createBtn)
 
 	if err := app.Run(); err != nil {
