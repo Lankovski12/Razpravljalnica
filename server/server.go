@@ -130,6 +130,13 @@ func (s *server) FindUser(_ context.Context, in *razp.FindUserRequest) (*razp.Us
 	return nil, status.Error(codes.InvalidArgument, "User does not exist")
 }
 
+func (s *server) ListUsers(_ context.Context, empty *emptypb.Empty) (*razp.ListUsersResponse, error) {
+	userMu.RLock()
+	defer userMu.RUnlock()
+	allUsers := append([]*razp.User(nil), users...)
+	return &razp.ListUsersResponse{Users: allUsers}, nil
+}
+
 func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*razp.Topic, error) {
 	lockWrite(&topicMu, &messageMu, &subMu)
 	defer unlockWrite(&topicMu, &messageMu, &subMu)
@@ -160,13 +167,28 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*razp.Message, error) {
 	messageMu.Lock()
 	defer messageMu.Unlock()
+
 	topicIdx := in.TopicId - 1
+
+	if topicIdx < 0 || topicIdx >= numOfTopics {
+		return nil, status.Error(codes.Aborted, "This topicID does not exist")
+	}
+
+	if topicIdx >= int64(len(topicMessages)) {
+		return nil, status.Error(codes.Aborted, "Topic messages not initialized")
+	}
+
 	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
 	currentTime := timestamppb.Now()
-	newMessage := &razp.Message{Id: numOfTopicMessages, TopicId: in.TopicId, UserId: in.UserId, Text: in.Text, CreatedAt: currentTime, Likes: 0}
-	topicMessages[in.TopicId-1] = append(topicMessages[topicIdx], newMessage)
-
-	// dodaj message v globalno tabelo sporocil
+	newMessage := &razp.Message{
+		Id:        numOfTopicMessages,
+		TopicId:   in.TopicId,
+		UserId:    in.UserId,
+		Text:      in.Text,
+		CreatedAt: currentTime,
+		Likes:     0,
+	}
+	topicMessages[topicIdx] = append(topicMessages[topicIdx], newMessage)
 
 	publishToTopic(topicIdx, &razp.MessageEvent{
 		SequenceNumber: seqNumber,
@@ -176,40 +198,53 @@ func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*r
 	})
 	seqNumber += 1
 
-	// funkcija za subscription ki
+	fmt.Printf("Added Message to Topic %d - Id:%d UserId:%d Text:%s\n", in.TopicId, numOfTopicMessages, in.UserId, in.Text)
 
 	return newMessage, nil
 }
 
 func (s *server) GetMessages(_ context.Context, in *razp.GetMessagesRequest) (*razp.GetMessagesResponse, error) {
-	// implementi linked list za messages al pa ne sj nvm probi zdle array/slice pa bomo pol fixal ce bo treba
 	lockRead(&topicMu, &messageMu)
 	defer unlockRead(&topicMu, &messageMu)
+
 	topicIdx := in.TopicId - 1
-	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
-	if topicIdx >= numOfTopics {
+
+	// Preveri ali topic obstaja
+	if topicIdx < 0 || topicIdx >= numOfTopics {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
-	if in.FromMessageId > numOfTopicMessages {
-		return nil, status.Error(codes.Aborted, "This messageID does not exist")
-	}
-	// ce je messageId prevlek ne bo delal
-	var leftInterval int64
-	var rightInterval int64
-	if in.Limit+int32(in.FromMessageId) > int32(numOfTopicMessages) {
-		leftInterval = in.FromMessageId - 1
-		rightInterval = numOfTopicMessages // ker slice ig vzame od vkljucno indexa do indexa (ne vkljucno)
+	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
+
+	// Če FromMessageId je 0, začni od 0
+	startIdx := in.FromMessageId
+	if startIdx == 0 {
+		startIdx = 0
+	} else if startIdx > numOfTopicMessages {
+		// Če je preveč velik, vrni napako
+		return nil, status.Error(codes.Aborted, "FromMessageId is out of range")
 	} else {
-		leftInterval = in.FromMessageId - 1
-		rightInterval = in.FromMessageId + int64(in.Limit)
+		startIdx = startIdx - 1 // Pretvori iz 1-based v 0-based indexing
 	}
 
-	messageInterval := append([]*razp.Message(nil), topicMessages[topicIdx][leftInterval:rightInterval]...)
-	// doda message v globalno tabelo sporocil
-	// fmt.Printf("LeftInterval:%d RightInterval:%d", leftInterval, rightInterval)
+	// Izračunaj end index
+	endIdx := startIdx + int64(in.Limit)
+	if endIdx > numOfTopicMessages {
+		endIdx = numOfTopicMessages
+	}
+
+	// Zagotovi da je startIdx <= endIdx
+	if startIdx > endIdx {
+		startIdx = endIdx
+	}
+
+	// Vzemi slice sporočil
+	var messageInterval []*razp.Message
+	if startIdx < int64(len(topicMessages[topicIdx])) {
+		messageInterval = append([]*razp.Message(nil), topicMessages[topicIdx][startIdx:endIdx]...)
+	}
+
 	newGetMessagesResponse := &razp.GetMessagesResponse{Messages: messageInterval}
-	// in naredi response zato da ga vrnemo
 	return newGetMessagesResponse, nil
 }
 
@@ -220,6 +255,35 @@ func (s *server) ListTopics(_ context.Context, empty *emptypb.Empty) (*razp.List
 	newListTopicsResponse := &razp.ListTopicsResponse{Topics: allTopics}
 	// vrne tabelo vseh topicov
 	return newListTopicsResponse, nil
+}
+
+func (s *server) GetUserMessages(_ context.Context, in *razp.GetUserMessagesRequest) (*razp.GetUserMessagesResponse, error) {
+	lockRead(&topicMu, &messageMu)
+	defer unlockRead(&topicMu, &messageMu)
+
+	userId := in.UserId
+	var userMessages []*razp.UserMessage
+
+	// Preglej vse topice
+	for topicIdx, messages := range topicMessages {
+		// Preglej vsa sporočila v topicu
+		for _, msg := range messages {
+			// Če je sporočilo napisal ta uporabnik in ni izbrisano
+			if msg.UserId == userId && msg.Text != "message deleted by user" {
+				userMsg := &razp.UserMessage{
+					TopicId:   msg.TopicId,
+					MessageId: msg.Id,
+					TopicName: topics[topicIdx].Name,
+					Text:      msg.Text,
+					CreatedAt: msg.CreatedAt,
+					Likes:     msg.Likes,
+				}
+				userMessages = append(userMessages, userMsg)
+			}
+		}
+	}
+
+	return &razp.GetUserMessagesResponse{Messages: userMessages}, nil
 }
 
 func (s *server) UpdateMessage(ctx context.Context, in *razp.UpdateMessageRequest) (*razp.Message, error) {

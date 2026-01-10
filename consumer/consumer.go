@@ -23,6 +23,7 @@ import (
 	//"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"time"
 
 	//"os"
@@ -43,6 +44,10 @@ var (
 
 	currentUserID   int64 = -1
 	currentUsername       = ""
+
+	selectedTopicIndex int = -1
+
+	userMap = make(map[int64]string)
 )
 
 /*func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn *tview.Button, themeColorSec tcell.Color) {
@@ -80,26 +85,19 @@ func main() {
 	loginBtn := tview.NewButton("Login")
 	loginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	//FLEX ZA GUMBA
-	buttonsColumn := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(createBtn, 3, 0, true).
-		AddItem(tview.NewBox(), 1, 0, false).
-		AddItem(loginBtn, 3, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	welcomeGrid := tview.NewGrid().
+		SetRows(10, 3, 1, 3, 2, 1).
+		SetColumns(0, 30, 0).
+		SetBorders(false)
 
-	//CENTRIRANO
-	buttonsFlex := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(buttonsColumn, 50, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	welcomeGrid.AddItem(createBtn, 1, 1, 1, 1, 0, 0, true)
+	welcomeGrid.AddItem(loginBtn, 3, 1, 1, 1, 0, 0, false)
+	welcomeGrid.AddItem(status, 5, 1, 1, 1, 0, 0, false)
 
 	//GLAVNA STRUKTURA
 	choiceFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(buttonsFlex, 0, 1, true)
+		AddItem(welcomeGrid, 0, 1, true)
 	choiceFlex.SetBorder(true).SetTitle(" Welcome ")
 
 	// SCREEN 2: CREATE NEW ACCOUNT
@@ -116,23 +114,21 @@ func main() {
 	backFromSignupBtn := tview.NewButton("Back")
 	backFromSignupBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	//FLEX ZA GUMBA
-	signupButtonsRow := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(createAccountButton, 25, 0, false).
-		AddItem(tview.NewBox(), 0, 0, false).
-		AddItem(backFromSignupBtn, 25, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	signupGrid := tview.NewGrid().
+		SetRows(3, 1, 2, 1, 3, 3, 1, 3, 0, 1).
+		SetColumns(0, 50, 0).
+		SetBorders(false)
+
+	signupGrid.AddItem(usernameField, 1, 1, 1, 1, 0, 0, false)
+	signupGrid.AddItem(passwordField, 3, 1, 1, 1, 0, 0, false)
+	signupGrid.AddItem(createAccountButton, 5, 1, 1, 1, 0, 30, false)
+	signupGrid.AddItem(backFromSignupBtn, 7, 1, 1, 1, 0, 30, false)
+	signupGrid.AddItem(status, 9, 1, 1, 2, 0, 0, false)
 
 	//GLAVNA STRUKTURA
 	signupFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(usernameField, 3, 1, true).
-		AddItem(passwordField, 3, 1, false).
-		AddItem(tview.NewBox(), 2, 0, false).
-		AddItem(signupButtonsRow, 3, 0, false).
-		AddItem(status, 2, 1, false)
+		AddItem(signupGrid, 0, 1, true)
 	signupFlex.SetBorder(true).SetTitle(" Sign Up ")
 
 	//SCREEN 3: LOGIN SCREEN
@@ -149,29 +145,26 @@ func main() {
 	backFromLoginBtn := tview.NewButton("Back")
 	backFromLoginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	//Flex za gumba
-	loginButtonsRow := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(loginButton, 25, 0, false).
-		AddItem(tview.NewBox(), 0, 0, false).
-		AddItem(backFromLoginBtn, 25, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	loginGrid := tview.NewGrid().
+		SetRows(3, 1, 2, 1, 3, 3, 1, 3, 0, 1).
+		SetColumns(0, 50, 0).
+		SetBorders(false)
+
+	loginGrid.AddItem(loginUsername, 1, 1, 1, 1, 0, 0, false)
+	loginGrid.AddItem(loginPassword, 3, 1, 1, 1, 0, 0, false)
+	loginGrid.AddItem(loginButton, 5, 1, 1, 1, 0, 30, false)
+	loginGrid.AddItem(backFromLoginBtn, 7, 1, 1, 1, 0, 30, false)
+	loginGrid.AddItem(status, 9, 1, 1, 2, 0, 0, false)
 
 	//GLAVNA STRUKTURA
 	loginFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(loginUsername, 3, 1, true).
-		AddItem(loginPassword, 3, 1, false).
-		AddItem(tview.NewBox(), 2, 0, false).
-		AddItem(loginButtonsRow, 3, 0, false).
-		AddItem(status, 2, 1, false)
+		AddItem(loginGrid, 0, 1, true)
 	loginFlex.SetBorder(true).SetTitle(" Login ")
 
 	//SCREEN 4: MAIN PAGE
 
 	topicList := tview.NewList().ShowSecondaryText(false)
-	messagesList := tview.NewList().ShowSecondaryText(false)
 
 	newTopicInput := tview.NewInputField().
 		SetLabel("New topic: ").
@@ -179,79 +172,71 @@ func main() {
 	newTopicInput.SetLabelColor(tcell.ColorWhite)
 	newTopicInput.SetFieldTextColor(tcell.ColorWhite)
 
-	createTopicBtn := tview.NewButton("Create topic")
-	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	createTopicBtn := tview.NewButton("Create")
+	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-	refreshBtn := tview.NewButton("Refresh page")
+	refreshBtn := tview.NewButton("Refresh")
 	refreshBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-	profileBtn := tview.NewButton("My profile")
-	profileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	profileBtn := tview.NewButton("My Profile")
+	profileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	inputFlex := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(newTopicInput, 0, 6, false).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(createTopicBtn, 0, 3, false)
+	newMessageBtn := tview.NewButton("New Message")
+	newMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-	//FLEX ZA GUMBE
-	leva := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(profileBtn, 0, 4, false).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(refreshBtn, 0, 4, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	subsribeTopic := tview.NewButton("Subscribe")
+	subsribeTopic.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	topicPanel := tview.NewFlex().
+	topicsGrid := tview.NewGrid().
+		SetRows(1, 35, 16, 1, 1, 3, 1, 3).
+		SetColumns(0, 0).
+		SetBorders(false)
+
+	topicsGrid.AddItem(topicList, 1, 0, 1, 2, 0, 0, true)
+	topicsGrid.AddItem(newTopicInput, 3, 0, 1, 1, 0, 0, false)
+	topicsGrid.AddItem(createTopicBtn, 5, 0, 1, 2, 0, 0, false)
+	topicsGrid.AddItem(profileBtn, 7, 0, 1, 1, 0, 0, false)
+	topicsGrid.AddItem(refreshBtn, 7, 1, 1, 1, 0, 0, false)
+
+	topicsPanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(topicList, 0, 15, false).
-		AddItem(inputFlex, 0, 1, false).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(leva, 0, 1, false)
-	topicPanel.SetBorder(true).SetTitle(" Topics ")
+		AddItem(topicsGrid, 0, 1, false)
+	topicsPanel.SetBorder(true).SetTitle(" Topics ")
 
-	messagesPanel := tview.NewFlex().
+	messagesGrid := tview.NewGrid().
+		SetRows(0).
+		SetColumns(0).
+		SetBorders(false)
+
+	messagesScroll := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(tview.NewTextView().SetText("Home:").SetTextAlign(tview.AlignCenter), 1, 0, false).
-		AddItem(messagesList, 0, 1, false).
-		AddItem(status, 2, 0, false)
+		AddItem(messagesGrid, 0, 1, true)
+
+	messagesDetailAll := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(messagesScroll, 0, 1, false).
+		AddItem(status, 1, 1, false).
+		AddItem(subsribeTopic, 3, 1, false).
+		AddItem(newMessageBtn, 3, 1, false)
+	messagesDetailAll.SetBorder(true).SetTitle(" Home ")
 
 	contentFlex := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(topicPanel, 0, 1, false).
-		AddItem(messagesPanel, 0, 3, false)
+		AddItem(topicsPanel, 0, 1, false).
+		AddItem(messagesDetailAll, 0, 3, false)
 
 	//SCREEN 5: PROFILE
-
 	profileUsernameDisplay := tview.NewTextView().
 		SetText("Username: " + currentUsername).
 		SetTextAlign(tview.AlignLeft)
 	profileUsernameDisplay.SetTextColor(tcell.ColorWhite)
 
-	// PROFILE SCREEN - Change password fields
-	profileOldPassword := tview.NewInputField().
-		SetLabel("Old password: ").
-		SetMaskCharacter('*').
-		SetFieldWidth(20)
-	profileOldPassword.SetLabelColor(tcell.ColorWhite)
-	profileOldPassword.SetFieldTextColor(tcell.ColorWhite)
-
-	profileNewPassword := tview.NewInputField().
-		SetLabel("New password: ").
-		SetMaskCharacter('*').
-		SetFieldWidth(20)
-	profileNewPassword.SetLabelColor(tcell.ColorWhite)
-	profileNewPassword.SetFieldTextColor(tcell.ColorWhite)
-
-	// PROFILE SCREEN - Theme selector (dropdown)
 	dropdown := tview.NewDropDown().
 		SetLabel("Theme: ").
 		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, func(option string, optionIndex int) {
-			// Ko izbereš temo, nastavi ustrezne barve
 			switch option {
 			case "Pink":
-				themeColorSec = tcell.ColorPink
+				themeColorSec = tcell.ColorRed
 			case "Green":
 				themeColorSec = tcell.ColorGreen
 			case "Orange":
@@ -263,51 +248,158 @@ func main() {
 			case "Violet":
 				themeColorSec = tcell.ColorPaleVioletRed
 			}
-			/*updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn, themeColorSec)*/
 		})
 	dropdown.SetLabelColor(tcell.ColorWhite)
 
+	profileOldPassword := tview.NewInputField().
+		SetLabel("Old password: ").
+		SetMaskCharacter('*').
+		SetFieldWidth(15)
+	profileOldPassword.SetLabelColor(tcell.ColorWhite)
+	profileOldPassword.SetFieldTextColor(tcell.ColorWhite)
+
+	profileNewPassword := tview.NewInputField().
+		SetLabel("New password: ").
+		SetMaskCharacter('*').
+		SetFieldWidth(15)
+	profileNewPassword.SetLabelColor(tcell.ColorWhite)
+	profileNewPassword.SetFieldTextColor(tcell.ColorWhite)
+
 	changePasswordBtn := tview.NewButton("Change Password")
-	changePasswordBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorGreen))
+	changePasswordBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 
-	// PROFILE SCREEN - Back button
 	backFromProfileBtn := tview.NewButton("Back")
-	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorRed))
+	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	usernameDisplayFlex := tview.NewFlex().
+	logoutBtn := tview.NewButton("Log out")
+	logoutBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorLightGray))
+
+	exitBtn := tview.NewButton("Exit")
+	exitBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorLightGray).Background(tcell.ColorWhite))
+
+	profileGrid := tview.NewGrid().
+		SetRows(2, 2, 2, 6, 3, 3, 3, 1, 3, 1, 1, 10, 3, 1, 3).
+		SetColumns(0, 30, 0).
+		SetBorders(false)
+
+	profileGrid.AddItem(profileUsernameDisplay, 1, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(dropdown, 2, 1, 1, 1, 0, 0, true)
+	profileGrid.AddItem(profileOldPassword, 4, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(profileNewPassword, 5, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(changePasswordBtn, 6, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(backFromProfileBtn, 8, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(status, 10, 0, 1, 3, 0, 0, false)
+	profileGrid.AddItem(logoutBtn, 12, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(exitBtn, 14, 1, 1, 1, 0, 0, false)
+
+	profilePanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(profileUsernameDisplay, 2, 0, false)
+		AddItem(profileGrid, 0, 1, true)
 
-	// PROFILE SCREEN - Buttons flex
-	profileButtonsRow := tview.NewFlex().
-		SetDirection(tview.FlexColumn).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(changePasswordBtn, 18, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false).
-		AddItem(backFromProfileBtn, 8, 0, false).
-		AddItem(tview.NewBox(), 0, 1, false)
+	profileMessagesGrid := tview.NewGrid().
+		SetRows(0).
+		SetColumns(0).
+		SetBorders(false)
 
-	// PROFILE SCREEN - Main structure
+	profileMessagesScroll := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(profileMessagesGrid, 0, 1, true)
+
+	profileMessagesPanel := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(profileMessagesScroll, 0, 1, false)
+
 	profileFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(tview.NewTextView().SetText("My Profile").SetTextAlign(tview.AlignCenter), 2, 0, false).
-		AddItem(tview.NewBox(), 1, 0, false).
-		AddItem(usernameDisplayFlex, 2, 0, false).
-		AddItem(tview.NewBox(), 1, 0, false).
-		AddItem(dropdown, 2, 0, false).
-		AddItem(tview.NewBox(), 2, 0, false).
-		AddItem(profileOldPassword, 3, 0, false).
-		AddItem(profileNewPassword, 3, 0, false).
-		AddItem(tview.NewBox(), 1, 0, false).
-		AddItem(profileButtonsRow, 3, 0, false).
-		AddItem(status, 2, 0, false)
+		SetDirection(tview.FlexColumn).
+		AddItem(profilePanel, 0, 1, false).
+		AddItem(profileMessagesPanel, 0, 2, false)
 	profileFlex.SetBorder(true).SetTitle(" Profile ")
+
+	//SCREEN 7: NEW MESSAGE - Pisanje novega sporočila
+
+	newMessageTitle := tview.NewInputField().
+		SetLabel("Title: ").
+		SetFieldWidth(30)
+	newMessageTitle.SetLabelColor(tcell.ColorWhite)
+	newMessageTitle.SetFieldTextColor(tcell.ColorWhite)
+
+	newMessageTextarea := tview.NewTextArea()
+	newMessageTextarea.SetBorderColor(tcell.ColorWhite)
+
+	postNewMessageBtn := tview.NewButton("Post")
+	postNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+
+	cancelNewMessageBtn := tview.NewButton("Cancel")
+	cancelNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+
+	newMessageGrid := tview.NewGrid().
+		SetRows(2, 2, 1, 0, 3, 1, 3).
+		SetColumns(0, 40, 0).
+		SetBorders(false)
+
+	newMessageGrid.AddItem(newMessageTitle, 1, 1, 1, 1, 0, 0, true)
+	newMessageGrid.AddItem(tview.NewTextView().SetText("Content:"), 2, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(newMessageTextarea, 3, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(postNewMessageBtn, 4, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(cancelNewMessageBtn, 6, 1, 1, 1, 0, 0, false)
+
+	newMessageFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(newMessageGrid, 0, 1, true)
+	newMessageFlex.SetBorder(true).SetTitle(" New Message ")
 
 	//FUNKCIJE
 
 	//FUNKCIJA KI NALOZI VSE TOPICS
 	updateProfileDisplay := func() {
 		profileUsernameDisplay.SetText("Username: " + currentUsername)
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := grpcClient.GetUserMessages(ctx, &razp.GetUserMessagesRequest{
+				UserId: currentUserID,
+			})
+			app.QueueUpdateDraw(func() {
+				profileMessagesGrid.Clear()
+
+				if err != nil {
+					errorText := tview.NewTextView().SetText("Error loading messages: " + err.Error())
+					errorText.SetTextColor(tcell.ColorRed)
+					profileMessagesGrid.AddItem(errorText, 0, 0, 1, 1, 0, 0, false)
+					return
+				}
+
+				if len(resp.Messages) == 0 {
+					emptyText := tview.NewTextView().SetText("No messages yet")
+					emptyText.SetTextColor(tcell.ColorGray)
+					profileMessagesGrid.AddItem(emptyText, 0, 0, 1, 1, 0, 0, false)
+					return
+				}
+
+				// Prikaži vsa sporočila
+				for i, msg := range resp.Messages {
+					messageText := fmt.Sprintf(
+						"[%s] Topic: %s (ID: %d)\n%s\n[Likes: %d]",
+						msg.CreatedAt.AsTime().Format("2006-01-02 15:04"),
+						msg.TopicName,
+						msg.MessageId,
+						msg.Text,
+						msg.Likes,
+					)
+
+					msgView := tview.NewTextView().
+						SetText(messageText).
+						SetDynamicColors(true).
+						SetWordWrap(true)
+					msgView.SetTextColor(tcell.ColorWhite)
+					msgView.SetBorder(true)
+
+					profileMessagesGrid.AddItem(msgView, i, 0, 1, 1, 0, 0, false)
+				}
+			})
+		}()
 	}
 
 	loadTopics := func() {
@@ -329,6 +421,24 @@ func main() {
 				}
 
 			})
+		}()
+	}
+
+	loadUsers := func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := grpcClient.ListUsers(ctx, &emptypb.Empty{})
+			if err != nil {
+				fmt.Printf("Napaka pri učitavanju uporabnikov: %v\n", err)
+				return
+			}
+
+			// Popuni userMap
+			for _, user := range resp.Users {
+				userMap[user.Id] = user.Name
+			}
 		}()
 	}
 
@@ -358,6 +468,7 @@ func main() {
 					currentUserID = raz.Id
 					pages.SwitchToPage("home")
 					loadTopics()
+					loadUsers()
 					app.SetFocus(topicList)
 				}
 			})
@@ -416,10 +527,156 @@ func main() {
 						currentUsername = name
 						pages.SwitchToPage("home")
 						loadTopics()
+						loadUsers()
 					}
 				})
 			}()
 		}
+	}
+
+	// FUNKCIJA ZA NALAGANJE SPOROČIL IZ TOPIC
+	loadMessagesForTopic := func(topicIndex int) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := grpcClient.GetMessages(ctx, &razp.GetMessagesRequest{
+				TopicId:       int64(topicIndex) + 1,
+				FromMessageId: 0,
+				Limit:         100,
+			})
+			app.QueueUpdateDraw(func() {
+				messagesGrid.Clear()
+				messagesGrid.SetRows(0).SetColumns(0)
+
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText("Failed to load messages: " + err.Error())
+					return
+				}
+
+				row := 0
+				for _, msg := range resp.Messages {
+					text := msg.Text
+					title := ""
+
+					if len(text) > 0 && text[0] == '[' {
+						endIdx := -1
+						for j, c := range text {
+							if c == ']' {
+								endIdx = j
+								break
+							}
+						}
+						if endIdx > 0 {
+							title = text[1:endIdx]
+							text = text[endIdx+2:]
+						}
+					}
+
+					messageView := tview.NewTextView().
+						SetDynamicColors(true).
+						SetWrap(true).
+						SetText(text)
+					messageView.SetBorder(true).SetTitle(fmt.Sprintf(" %s ", title)).SetTitleAlign(tview.AlignLeft)
+					messageView.SetBackgroundColor(tcell.ColorDefault)
+
+					likeCheckbox := tview.NewCheckbox().
+						SetLabel(fmt.Sprintf("%d likes", msg.Likes))
+					likeCheckbox.SetChangedFunc(func(checked bool) {
+						// Klik na Like - pošalji LikeMessage RPC
+						go func() {
+							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+							defer cancel()
+
+							_, err := grpcClient.LikeMessage(ctx, &razp.LikeMessageRequest{
+								TopicId:   int64(topicIndex) + 1,
+								MessageId: msg.Id + 1,
+								UserId:    currentUserID,
+							})
+							app.QueueUpdateDraw(func() {
+								if err != nil {
+									status.SetTextColor(tcell.ColorRed)
+									status.SetText("Failed to like message: " + err.Error())
+									return
+								}
+
+							})
+						}()
+					})
+
+					metaText := fmt.Sprintf("by %s | %s", userMap[msg.UserId], msg.CreatedAt.AsTime().Format("15:04"))
+					metaView := tview.NewTextView().
+						SetText(metaText).
+						SetTextAlign(tview.AlignLeft)
+					metaView.SetTextColor(tcell.ColorGray)
+
+					messagesGrid.AddItem(messageView, row, 0, 1, 1, 0, 0, false)
+					messagesGrid.AddItem(metaView, row+1, 0, 1, 1, 0, 0, false)
+					messagesGrid.AddItem(likeCheckbox, row+2, 0, 1, 1, 0, 0, true)
+
+					row += 3
+				}
+
+				rows := make([]int, row)
+				for i := range rows {
+					if i%2 == 0 {
+						rows[i] = 5
+					} else {
+						rows[i] = 1
+					}
+				}
+				if len(rows) > 0 {
+					messagesGrid.SetRows(rows...)
+				}
+
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText(fmt.Sprintf("Loaded %d messages", len(resp.Messages)))
+			})
+		}()
+	}
+
+	// FUNKCIJA ZA POŠILJANJE NOVEGA SPOROČILA
+	postMessage := func(topicIndex int, messageText string) {
+		messageTitle := newMessageTitle.GetText()
+
+		if messageText == "" {
+			status.SetTextColor(tcell.ColorRed)
+			status.SetText("Message cannot be empty")
+			return
+		}
+
+		fullMessage := messageText
+		if messageTitle != "" {
+			fullMessage = "[" + messageTitle + "] " + messageText
+		}
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			_, err := grpcClient.PostMessage(ctx, &razp.PostMessageRequest{
+				TopicId: int64(topicIndex) + 1,
+				UserId:  currentUserID,
+				Text:    fullMessage,
+			})
+			app.QueueUpdateDraw(func() {
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText("Failed to post message: " + err.Error())
+					return
+				}
+
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText("Message posted successfully")
+				newMessageTextarea.SetText("", false)
+				newMessageTitle.SetText("")
+
+				loadMessagesForTopic(topicIndex)
+				pages.SwitchToPage("topicDetail")
+				app.SetFocus(messagesGrid)
+			})
+		}()
 	}
 
 	// FUNKCIJE ZA GUMBE
@@ -465,7 +722,6 @@ func main() {
 	profileBtn.SetSelectedFunc(func() {
 		updateProfileDisplay()
 		pages.SwitchToPage("profile")
-		app.SetFocus(dropdown)
 	})
 
 	//USTAVRI NOW TOPIC
@@ -474,9 +730,126 @@ func main() {
 		if topicName == "" {
 			status.SetTextColor(tcell.ColorRed)
 			status.SetText("Topic name cannot be empty")
-			return
 		}
 		createTopic(topicName)
+	})
+
+	// FUNKCIJA ZA KLIK NA TOPIC
+	topicList.SetSelectedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
+		selectedTopicIndex = index
+		loadMessagesForTopic(index)
+	})
+
+	newMessageBtn.SetSelectedFunc(func() {
+		newMessageTextarea.SetText("", false)
+		pages.SwitchToPage("newMessage")
+	})
+
+	// BUTTON AKCIJE ZA NEW MESSAGE SCREEN
+	postNewMessageBtn.SetSelectedFunc(func() {
+		messageText := newMessageTextarea.GetText()
+		postMessage(selectedTopicIndex, messageText)
+		pages.SwitchToPage("home")
+	})
+
+	cancelNewMessageBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("home")
+	})
+
+	logoutBtn.SetSelectedFunc(func() {
+		pages.SwitchToPage("choice")
+		currentUsername = ""
+		currentUserID = -1
+	})
+
+	exitBtn.SetSelectedFunc(func() {
+		app.Stop()
+	})
+
+	changePasswordBtn.SetSelectedFunc(func() {
+		oldPass := profileOldPassword.GetText()
+		newPass := profileNewPassword.GetText()
+
+		if oldPass == "" || newPass == "" {
+			status.SetTextColor(tcell.ColorRed)
+			status.SetText("Both passwords required")
+			return
+		}
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			_, err := grpcClient.FindUser(ctx, &razp.FindUserRequest{
+				Name:     currentUsername,
+				Password: oldPass,
+			})
+
+			app.QueueUpdateDraw(func() {
+				if err != nil {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText("Old password is incorrect")
+					return
+				}
+
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText("Password change: waiting for server implementation")
+
+				profileOldPassword.SetText("")
+				profileNewPassword.SetText("")
+			})
+		}()
+	})
+
+	subsribeTopic.SetSelectedFunc(func() {
+		if selectedTopicIndex == -1 {
+			status.SetTextColor(tcell.ColorRed)
+			status.SetText("Please select a topic first!")
+			return
+		}
+
+		go func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			stream, err := grpcClient.SubscribeTopic(ctx, &razp.SubscribeTopicRequest{
+				TopicId:       int64(selectedTopicIndex) + 1,
+				UserId:        currentUserID,
+				FromMessageId: 0,
+			})
+
+			if err != nil {
+				app.QueueUpdateDraw(func() {
+					status.SetTextColor(tcell.ColorRed)
+					status.SetText("Subscribe error: " + err.Error())
+				})
+				return
+			}
+
+			app.QueueUpdateDraw(func() {
+				status.SetTextColor(tcell.ColorGreen)
+				status.SetText("Subscribed! Waiting for new messages...")
+			})
+
+			for {
+				ev, err := stream.Recv()
+				if err != nil {
+					app.QueueUpdateDraw(func() {
+						status.SetTextColor(tcell.ColorYellow)
+						status.SetText("Subscription ended")
+					})
+					break
+				}
+
+				app.QueueUpdateDraw(func() {
+					loadMessagesForTopic(selectedTopicIndex)
+					status.SetTextColor(tcell.ColorGreen)
+					status.SetText("New message received!")
+				})
+
+				_ = ev
+			}
+		}()
 	})
 
 	//ČE PRITISNEMO ENTER
@@ -527,6 +900,7 @@ func main() {
 	pages.AddPage("login", loginFlex, true, false)
 	pages.AddPage("home", contentFlex, true, false)
 	pages.AddPage("profile", profileFlex, true, false)
+	pages.AddPage("newMessage", newMessageFlex, true, false)
 
 	//ZACNI APLIKACIJO
 	app.SetRoot(pages, true).SetFocus(createBtn)

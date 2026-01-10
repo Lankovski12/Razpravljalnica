@@ -5,11 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="15839924-100a-4b05-bbe5-ab6a19dfb841" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/testi/test_podatki.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/consumer.go" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/consumer/consumer.go" beforeDir="false" afterPath="$PROJECT_DIR$/consumer/consumer.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server.go" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/testconsumer.go" beforeDir="false" afterPath="$PROJECT_DIR$/testconsumer.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/razpravljalnica/razpravljalnica.pb.go" beforeDir="false" afterPath="$PROJECT_DIR$/razpravljalnica/razpravljalnica.pb.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/razpravljalnica/razpravljalnica.proto" beforeDir="false" afterPath="$PROJECT_DIR$/razpravljalnica/razpravljalnica.proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/razpravljalnica/razpravljalnica_grpc.pb.go" beforeDir="false" afterPath="$PROJECT_DIR$/razpravljalnica/razpravljalnica_grpc.pb.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/server/server.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -93,6 +95,17 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>

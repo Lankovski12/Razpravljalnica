@@ -93,6 +93,10 @@ service  MessageBoard{
   // Subscribe to topics; goes to the node returned by head
   rpc SubscribeTopic(SubscribeTopicRequest) returns (stream MessageEvent);
 
+  rpc ListUsers(google.protobuf.Empty) returns (ListUsersResponse);
+
+  rpc GetUserMessages(GetUserMessagesRequest) returns (GetUserMessagesResponse);
+
 }
 
 message CreateUserRequest {
@@ -107,6 +111,10 @@ message FindUserRequest {
 
 message ReturnUserRequest {
   int64 id = 1;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
 }
 
 message CreateTopicRequest {
@@ -173,6 +181,23 @@ message MessageEvent {
   OpType op = 2; // type of event
   Message message = 3;
   google.protobuf.Timestamp event_at = 4; // timestamp of the event
+}
+
+message GetUserMessagesRequest {
+  int64 user_id = 1;
+}
+
+message UserMessage {
+  int64 topic_id = 1;
+  int64 message_id = 2;
+  string topic_name = 3;
+  string text = 4;
+  google.protobuf.Timestamp created_at = 5;
+  int32 likes = 6;
+}
+
+message GetUserMessagesResponse {
+  repeated UserMessage messages = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
