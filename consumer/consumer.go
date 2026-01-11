@@ -50,19 +50,25 @@ var (
 	userMap = make(map[int64]string)
 )
 
-/*func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn *tview.Button, themeColorSec tcell.Color) {
+func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, newMessageBtn, subsribeTopic, postNewMessageBtn, cancelNewMessageBtn, changePasswordBtn, backFromProfileBtn, profileBtn *tview.Button, themeColorSec tcell.Color) {
+	createBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	loginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 	createAccountButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 	backFromSignupBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 	loginButton.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 	backFromLoginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
-	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	createTopicBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
 	refreshBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
-	profileBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
-	createBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
-	loginBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	profileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	newMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	subsribeTopic.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	postNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	cancelNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+	changePasswordBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
 	app.Draw()
-}*/
+}
 
 func main() {
 	app := tview.NewApplication()
@@ -188,7 +194,7 @@ func main() {
 	subsribeTopic.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
 	topicsGrid := tview.NewGrid().
-		SetRows(1, 35, 16, 1, 1, 3, 1, 3).
+		SetRows(1, 19, 10, 1, 1, 3, 1, 3).
 		SetColumns(0, 0).
 		SetBorders(false)
 
@@ -225,31 +231,44 @@ func main() {
 		AddItem(topicsPanel, 0, 1, false).
 		AddItem(messagesDetailAll, 0, 3, false)
 
+	//SCREEN 7: NEW MESSAGE - Pisanje novega sporočila
+
+	newMessageTitle := tview.NewInputField().
+		SetLabel("Title: ").
+		SetFieldWidth(30)
+	newMessageTitle.SetLabelColor(tcell.ColorWhite)
+	newMessageTitle.SetFieldTextColor(tcell.ColorWhite)
+
+	newMessageTextarea := tview.NewTextArea()
+	newMessageTextarea.SetBorderColor(tcell.ColorWhite)
+
+	postNewMessageBtn := tview.NewButton("Post")
+	postNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
+
+	cancelNewMessageBtn := tview.NewButton("Cancel")
+	cancelNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
+
+	newMessageGrid := tview.NewGrid().
+		SetRows(2, 2, 1, 0, 3, 1, 3).
+		SetColumns(0, 40, 0).
+		SetBorders(false)
+
+	newMessageGrid.AddItem(newMessageTitle, 1, 1, 1, 1, 0, 0, true)
+	newMessageGrid.AddItem(tview.NewTextView().SetText("Content:"), 2, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(newMessageTextarea, 3, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(postNewMessageBtn, 4, 1, 1, 1, 0, 0, false)
+	newMessageGrid.AddItem(cancelNewMessageBtn, 6, 1, 1, 1, 0, 0, false)
+
+	newMessageFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(newMessageGrid, 0, 1, true)
+	newMessageFlex.SetBorder(true).SetTitle(" New Message ")
+
 	//SCREEN 5: PROFILE
 	profileUsernameDisplay := tview.NewTextView().
 		SetText("Username: " + currentUsername).
 		SetTextAlign(tview.AlignLeft)
 	profileUsernameDisplay.SetTextColor(tcell.ColorWhite)
-
-	dropdown := tview.NewDropDown().
-		SetLabel("Theme: ").
-		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, func(option string, optionIndex int) {
-			switch option {
-			case "Pink":
-				themeColorSec = tcell.ColorRed
-			case "Green":
-				themeColorSec = tcell.ColorGreen
-			case "Orange":
-				themeColorSec = tcell.ColorOrange
-			case "Blue":
-				themeColorSec = tcell.ColorBlue
-			case "Red":
-				themeColorSec = tcell.ColorRed
-			case "Violet":
-				themeColorSec = tcell.ColorPaleVioletRed
-			}
-		})
-	dropdown.SetLabelColor(tcell.ColorWhite)
 
 	profileOldPassword := tview.NewInputField().
 		SetLabel("Old password: ").
@@ -271,6 +290,27 @@ func main() {
 	backFromProfileBtn := tview.NewButton("Back")
 	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
+	dropdown := tview.NewDropDown().
+		SetLabel("Theme: ").
+		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, func(option string, optionIndex int) {
+			switch option {
+			case "Pink":
+				themeColorSec = tcell.ColorRed
+			case "Green":
+				themeColorSec = tcell.ColorGreen
+			case "Orange":
+				themeColorSec = tcell.ColorOrange
+			case "Blue":
+				themeColorSec = tcell.ColorBlue
+			case "Red":
+				themeColorSec = tcell.ColorRed
+			case "Violet":
+				themeColorSec = tcell.ColorPaleVioletRed
+			}
+		})
+	//updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn, newMessageBtn, subsribeTopic, changePasswordBtn, backFromProfileBtn, postNewMessageBtn, cancelNewMessageBtn, themeColorSec)
+	dropdown.SetLabelColor(tcell.ColorWhite)
+
 	logoutBtn := tview.NewButton("Log out")
 	logoutBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorLightGray))
 
@@ -278,7 +318,7 @@ func main() {
 	exitBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorLightGray).Background(tcell.ColorWhite))
 
 	profileGrid := tview.NewGrid().
-		SetRows(2, 2, 2, 6, 3, 3, 3, 1, 3, 1, 1, 10, 3, 1, 3).
+		SetRows(2, 2, 2, 6, 3, 3, 3, 1, 3, 1, 1, 4, 3, 1, 3).
 		SetColumns(0, 30, 0).
 		SetBorders(false)
 
@@ -314,39 +354,6 @@ func main() {
 		AddItem(profilePanel, 0, 1, false).
 		AddItem(profileMessagesPanel, 0, 2, false)
 	profileFlex.SetBorder(true).SetTitle(" Profile ")
-
-	//SCREEN 7: NEW MESSAGE - Pisanje novega sporočila
-
-	newMessageTitle := tview.NewInputField().
-		SetLabel("Title: ").
-		SetFieldWidth(30)
-	newMessageTitle.SetLabelColor(tcell.ColorWhite)
-	newMessageTitle.SetFieldTextColor(tcell.ColorWhite)
-
-	newMessageTextarea := tview.NewTextArea()
-	newMessageTextarea.SetBorderColor(tcell.ColorWhite)
-
-	postNewMessageBtn := tview.NewButton("Post")
-	postNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(themeColorSec))
-
-	cancelNewMessageBtn := tview.NewButton("Cancel")
-	cancelNewMessageBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
-
-	newMessageGrid := tview.NewGrid().
-		SetRows(2, 2, 1, 0, 3, 1, 3).
-		SetColumns(0, 40, 0).
-		SetBorders(false)
-
-	newMessageGrid.AddItem(newMessageTitle, 1, 1, 1, 1, 0, 0, true)
-	newMessageGrid.AddItem(tview.NewTextView().SetText("Content:"), 2, 1, 1, 1, 0, 0, false)
-	newMessageGrid.AddItem(newMessageTextarea, 3, 1, 1, 1, 0, 0, false)
-	newMessageGrid.AddItem(postNewMessageBtn, 4, 1, 1, 1, 0, 0, false)
-	newMessageGrid.AddItem(cancelNewMessageBtn, 6, 1, 1, 1, 0, 0, false)
-
-	newMessageFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(newMessageGrid, 0, 1, true)
-	newMessageFlex.SetBorder(true).SetTitle(" New Message ")
 
 	//FUNKCIJE
 
