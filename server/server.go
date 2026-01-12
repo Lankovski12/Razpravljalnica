@@ -104,8 +104,8 @@ func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*raz
 		return nil, status.Error(codes.InvalidArgument, "password required")
 	}
 	//dodat potrebno za sifrirat
-	newUser := &razp.User{Id: numOfUsers, Name: newUserName, Password: newPassword}
 	numOfUsers += 1
+	newUser := &razp.User{Id: numOfUsers, Name: newUserName, Password: newPassword}
 	users = append(users, newUser)
 	fmt.Printf("Added New User, Id:%d Name: %s, Password: %s\n", newUser.Id, newUser.Name, newUser.Password)
 
@@ -158,8 +158,8 @@ func (s *server) CreateTopic(_ context.Context, in *razp.CreateTopicRequest) (*r
 		}
 	}
 
-	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName}
 	numOfTopics += 1
+	newTopic := &razp.Topic{Id: numOfTopics, Name: newTopicName}
 	topics = append(topics, newTopic)
 	// ustvari topic in ga dodaj v global tabelo in dodaj kanal za subscription
 	topicMessages = append(topicMessages, make([]*razp.Message, 0, 10))
@@ -187,7 +187,7 @@ func (s *server) PostMessage(_ context.Context, in *razp.PostMessageRequest) (*r
 	numOfTopicMessages := int64(len(topicMessages[topicIdx]))
 	currentTime := timestamppb.Now()
 	newMessage := &razp.Message{
-		Id:        numOfTopicMessages,
+		Id:        numOfTopicMessages + 1,
 		TopicId:   in.TopicId,
 		UserId:    in.UserId,
 		Text:      in.Text,
@@ -363,12 +363,13 @@ func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (
 	defer unlockWrite(&messageMu, &likeMu)
 	topicIdx := in.TopicId - 1
 	messageIdx := in.MessageId - 1
+	userIdx := in.UserId - 1
 
-	if topicIdx >= numOfTopics {
+	if topicIdx >= numOfTopics || topicIdx < 0 {
 		return nil, status.Error(codes.Aborted, "This topicID does not exist")
 	}
 
-	if messageIdx >= int64(len(topicMessages[topicIdx])) {
+	if messageIdx < 0 || messageIdx >= int64(len(topicMessages[topicIdx])) {
 		return nil, status.Error(codes.Aborted, "This messageID does not exist")
 	}
 
@@ -378,8 +379,8 @@ func (s *server) LikeMessage(ctx context.Context, in *razp.LikeMessageRequest) (
 
 	// napake ki nam lahko povzrocijo tezave ali nedovoljene dostope
 
-	likes[topicIdx][messageIdx][in.UserId] = !likes[topicIdx][messageIdx][in.UserId]
-	if likes[topicIdx][messageIdx][in.UserId] {
+	likes[topicIdx][messageIdx][userIdx] = !likes[topicIdx][messageIdx][userIdx]
+	if likes[topicIdx][messageIdx][userIdx] {
 		topicMessages[topicIdx][messageIdx].Likes += 1
 	} else {
 		topicMessages[topicIdx][messageIdx].Likes -= 1

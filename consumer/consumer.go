@@ -752,7 +752,7 @@ func main() {
 
 							_, err := grpcClient.LikeMessage(ctx, &razp.LikeMessageRequest{
 								TopicId:   int64(tIdx) + 1,
-								MessageId: msgID + 1,
+								MessageId: msgID,
 								UserId:    currentUserID,
 							})
 							app.QueueUpdateDraw(func() {
@@ -790,13 +790,13 @@ func main() {
 			type messageWithTopic struct {
 				msg       *razp.Message
 				topicName string
-				topicIdx  int
+				topicId   int64
 			}
 			var allMessages []messageWithTopic
 
-			for i, topic := range topicsResp.Topics {
+			for _, topic := range topicsResp.Topics {
 				msgResp, err := grpcClient.GetMessages(ctx, &razp.GetMessagesRequest{
-					TopicId:       topic.Id + 1,
+					TopicId:       topic.Id,
 					FromMessageId: 0,
 					Limit:         1000,
 				})
@@ -809,7 +809,7 @@ func main() {
 						allMessages = append(allMessages, messageWithTopic{
 							msg:       msg,
 							topicName: topic.Name,
-							topicIdx:  i,
+							topicId:   topic.Id,
 						})
 					}
 				}
@@ -852,15 +852,15 @@ func main() {
 
 					// lajki
 					msgID := sporocilo.Id
-					tIdx := allMessages[i].topicIdx
+					topicID := allMessages[i].topicId
 					messagesTable.AddItem("[gray]"+fmt.Sprintf("%d likes", sporocilo.Likes)+"[-]", "", 0, func() {
 						go func() {
 							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 							defer cancel()
 
 							_, err := grpcClient.LikeMessage(ctx, &razp.LikeMessageRequest{
-								TopicId:   int64(tIdx) + 1,
-								MessageId: msgID + 1,
+								TopicId:   topicID,
+								MessageId: msgID,
 								UserId:    currentUserID,
 							})
 							app.QueueUpdateDraw(func() {
