@@ -24,6 +24,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"time"
 
 	//"os"
@@ -289,6 +290,11 @@ func main() {
 		SetTextAlign(tview.AlignLeft)
 	profileUsernameDisplay.SetTextColor(tcell.ColorWhite)
 
+	themeText := tview.NewTextView().
+		SetText("Theme: ").
+		SetTextAlign(tview.AlignLeft)
+	profileUsernameDisplay.SetTextColor(tcell.ColorWhite)
+
 	profileOldPassword := tview.NewInputField().
 		SetLabel("Old password: ").
 		SetMaskCharacter('*').
@@ -309,12 +315,23 @@ func main() {
 	backFromProfileBtn := tview.NewButton("Back")
 	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
-	dropdown := tview.NewDropDown().
-		SetLabel("Theme: ").
-		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, nil)
-	dropdown.SetLabelColor(tcell.ColorWhite)
-	dropdown.SetFieldBackgroundColor(tcell.ColorBlack)
-	dropdown.SetFieldTextColor(tcell.ColorWhite)
+	pinkBtn := tview.NewButton("Pink")
+	pinkBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorLightPink))
+
+	blueBtn := tview.NewButton("Blue")
+	blueBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlue))
+
+	greenBtn := tview.NewButton("Green")
+	greenBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorGreen))
+
+	redBtn := tview.NewButton("Red")
+	redBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorRed))
+
+	violetBtn := tview.NewButton("Violet")
+	violetBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorViolet))
+
+	orangeBtn := tview.NewButton("Orange")
+	orangeBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorOrange))
 
 	logoutBtn := tview.NewButton("Log out")
 	logoutBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorLightGray))
@@ -323,19 +340,25 @@ func main() {
 	exitBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorLightGray).Background(tcell.ColorWhite))
 
 	profileGrid := tview.NewGrid().
-		SetRows(2, 2, 2, 6, 3, 3, 3, 1, 3, 1, 1, 4, 3, 1, 3).
-		SetColumns(0, 30, 0).
+		SetRows(2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 1, 3, 3).
+		SetColumns(0, 15, 3, 15, 0).
 		SetBorders(false)
 
-	profileGrid.AddItem(profileUsernameDisplay, 1, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(dropdown, 2, 1, 1, 1, 0, 0, true)
-	profileGrid.AddItem(profileOldPassword, 4, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(profileNewPassword, 5, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(changePasswordBtn, 6, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(backFromProfileBtn, 8, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(status, 10, 0, 1, 3, 0, 0, false)
-	profileGrid.AddItem(logoutBtn, 12, 1, 1, 1, 0, 0, false)
-	profileGrid.AddItem(exitBtn, 14, 1, 1, 1, 0, 0, false)
+	profileGrid.AddItem(profileUsernameDisplay, 1, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(themeText, 2, 1, 1, 3, 0, 0, true)
+	profileGrid.AddItem(pinkBtn, 3, 1, 1, 1, 0, 0, true)
+	profileGrid.AddItem(violetBtn, 3, 3, 1, 1, 0, 0, true)
+	profileGrid.AddItem(redBtn, 4, 1, 1, 1, 0, 0, true)
+	profileGrid.AddItem(orangeBtn, 4, 3, 1, 1, 0, 0, true)
+	profileGrid.AddItem(greenBtn, 5, 1, 1, 1, 0, 0, true)
+	profileGrid.AddItem(blueBtn, 5, 3, 1, 1, 0, 0, true)
+	profileGrid.AddItem(profileOldPassword, 7, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(profileNewPassword, 8, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(changePasswordBtn, 9, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(backFromProfileBtn, 10, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(status, 12, 0, 1, 3, 0, 0, false)
+	profileGrid.AddItem(logoutBtn, 13, 1, 1, 3, 0, 0, false)
+	profileGrid.AddItem(exitBtn, 14, 1, 1, 3, 0, 0, false)
 
 	profilePanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -360,7 +383,7 @@ func main() {
 	//FUNKCIJE
 
 	//za profil
-	updateProfileDisplay := func() {
+	updateProfileDisplay = func() {
 		profileUsernameDisplay.SetText("Username: " + currentUsername)
 
 		go func() {
@@ -406,36 +429,36 @@ func main() {
 					}
 
 					// Message item (header + text)
-					profileMessagesList.AddItem(header, text, 0, nil)
+					profileMessagesList.AddItem(header, "[white]"+text+"[-]", 0, nil)
 
 					// Time and likes
-					profileMessagesList.AddItem(fmt.Sprintf("%s • %d likes", msg.CreatedAt.AsTime().Format("02.01.2006 15:04"), msg.Likes), "", 0, nil)
+					profileMessagesList.AddItem("[gray]"+fmt.Sprintf("%s • %d likes", msg.CreatedAt.AsTime().Format("02.01.2006 15:04"), msg.Likes)+"[-]", "", 0, nil)
 
 					// Edit button - clickable
 					topicID := msg.TopicId
 					messageID := msg.MessageId
 					msgText := msg.Text
-					profileMessagesList.AddItem("[Edit]", "", 0, func() {
+					edit := fmt.Sprintf("Edit")
+					profileMessagesList.AddItem("[gray]"+edit+"[-]", "", 0, func() {
 						// Create edit modal
 						editTextarea := tview.NewTextArea()
 						editTextarea.SetText(msgText, true)
-						editTextarea.SetBorder(true).SetTitle(" Edit Message ")
 
 						saveBtn := tview.NewButton("Save")
 						cancelBtn := tview.NewButton("Cancel")
 
 						editGrid := tview.NewGrid().
-							SetRows(0, 3).
-							SetColumns(0, 15, 15, 0).
+							SetRows(15, 10, 3).
+							SetColumns(0, 30, 5, 30, 0).
 							SetBorders(false)
-						editGrid.AddItem(editTextarea, 0, 0, 1, 4, 0, 0, true)
-						editGrid.AddItem(saveBtn, 1, 1, 1, 1, 0, 0, false)
-						editGrid.AddItem(cancelBtn, 1, 2, 1, 1, 0, 0, false)
+						editGrid.AddItem(editTextarea, 1, 1, 1, 3, 0, 0, true)
+						editGrid.AddItem(saveBtn, 2, 1, 1, 1, 0, 0, false)
+						editGrid.AddItem(cancelBtn, 2, 3, 1, 1, 0, 0, false)
+						editTextarea.SetBorder(true).SetTitle(" Edit Message ")
 
 						editFlex := tview.NewFlex().
 							SetDirection(tview.FlexRow).
 							AddItem(editGrid, 0, 1, true)
-						editFlex.SetBorder(true).SetTitle(" Edit Message ")
 
 						pages.AddPage("editMessage", editFlex, true, true)
 
@@ -471,7 +494,8 @@ func main() {
 					})
 
 					// Delete button - clickable
-					profileMessagesList.AddItem("[Delete]", "", 0, func() {
+					delete := fmt.Sprintf("Delete")
+					profileMessagesList.AddItem("[gray]"+delete+"[-]", "", 0, func() {
 						// Confirm delete
 						modal := tview.NewModal().
 							SetText("Are you sure you want to delete this message?").
@@ -673,8 +697,8 @@ func main() {
 					return
 				}
 
-				for _, msg := range resp.Messages {
-					// Skip deleted messages
+				for i := len(resp.Messages) - 1; i >= 0; i-- {
+					msg := resp.Messages[i]
 					if msg.Text == "message deleted by user" {
 						continue
 					}
@@ -701,7 +725,7 @@ func main() {
 					header := fmt.Sprintf("[:/%s | %s]", topicName, title)
 
 					// topic | naslov + sporocilo
-					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", username, msg.CreatedAt.AsTime().Format("01.02.2025 15:04"))+"[-]", 0, nil)
+					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", username, msg.CreatedAt.AsTime().Format("02.01.2006 15:04"))+"[-]", 0, nil)
 
 					messagesTable.AddItem(" ", "", 0, nil)
 
@@ -762,7 +786,7 @@ func main() {
 
 			for i, topic := range topicsResp.Topics {
 				msgResp, err := grpcClient.GetMessages(ctx, &razp.GetMessagesRequest{
-					TopicId:       topic.Id,
+					TopicId:       topic.Id + 1,
 					FromMessageId: 0,
 					Limit:         1000,
 				})
@@ -779,6 +803,10 @@ func main() {
 						})
 					}
 				}
+
+				rand.Shuffle(len(allMessages), func(i, j int) {
+					allMessages[i], allMessages[j] = allMessages[j], allMessages[i]
+				})
 			}
 
 			app.QueueUpdateDraw(func() {
@@ -810,7 +838,7 @@ func main() {
 
 					header := fmt.Sprintf("[:/%s | %s]", item.topicName, title)
 
-					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", userMap[int(msg.UserId)], msg.CreatedAt.AsTime().Format("01. 02. 2025 15:04"))+"[-]", 0, nil)
+					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", userMap[int(msg.UserId)], msg.CreatedAt.AsTime().Format("02.01.2006 15:04"))+"[-]", 0, nil)
 
 					messagesTable.AddItem(" ", "", 0, nil)
 
@@ -1079,20 +1107,6 @@ func main() {
 				_ = ev
 			}
 		}()
-	})
-
-	dropdown.SetSelectedFunc(func(text string, index int) {
-		colorMap := map[string]tcell.Color{
-			"Pink":   tcell.ColorLightPink,
-			"Blue":   tcell.ColorBlue,
-			"Red":    tcell.ColorRed,
-			"Green":  tcell.ColorGreen,
-			"Orange": tcell.ColorOrange,
-			"Violet": tcell.ColorPurple,
-		}
-
-		themeColorSec = colorMap[text]
-		updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, newMessageBtn, subsribeTopic, postNewMessageBtn, cancelNewMessageBtn, changePasswordBtn, backFromProfileBtn, profileBtn, themeColorSec)
 	})
 
 	//ČE PRITISNEMO ENTER
