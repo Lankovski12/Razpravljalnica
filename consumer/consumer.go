@@ -479,7 +479,7 @@ func main() {
 
 								_, err := grpcClient.UpdateMessage(ctx, &razp.UpdateMessageRequest{
 									TopicId:   topicID,
-									MessageId: messageID + 1,
+									MessageId: messageID,
 									UserId:    currentUserID,
 									Text:      newText,
 								})
@@ -518,7 +518,7 @@ func main() {
 
 										_, err := grpcClient.DeleteMessage(ctx, &razp.DeleteMessageRequest{
 											TopicId:   topicID,
-											MessageId: messageID + 1,
+											MessageId: messageID,
 											UserId:    currentUserID,
 										})
 										app.QueueUpdateDraw(func() {
