@@ -112,6 +112,12 @@ func (s *server) CreateUser(_ context.Context, in *razp.CreateUserRequest) (*raz
 	return newUser, nil
 }
 
+func (s *server) ChangePass(_ context.Context, in *razp.ChangeUserRequest) (*emptypb.Empty, error) {
+	users[in.Id].Password = in.Password
+
+	return nil, nil
+}
+
 func (s *server) FindUser(_ context.Context, in *razp.FindUserRequest) (*razp.User, error) {
 	userMu.RLock()
 	defer userMu.RUnlock()

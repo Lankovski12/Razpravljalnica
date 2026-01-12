@@ -126,7 +126,7 @@ func main() {
 		topicID := topicIDs[topicName]
 
 		// Povežem z različnimi uporabniki
-		userList := []string{"Alice", "Bob", "Charlie", "Diana", "Eve"}
+		userList := []string{"Alice", "Bob", "Charlie", "Diana", "Eve", "Adam", "Mike", "Loti", "Rick", "Butter"}
 
 		for i, msg := range msgs {
 			userID := userIDs[userList[i%len(userList)]]

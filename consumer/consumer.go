@@ -47,7 +47,13 @@ var (
 
 	selectedTopicIndex int = -1
 
-	userMap = make(map[int64]string)
+	userMap = make(map[int]string)
+
+	statusTicker *time.Ticker
+
+	loadAllMessages      func()
+	loadMessagesForTopic func(topicIndex int)
+	updateProfileDisplay func()
 )
 
 func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, newMessageBtn, subsribeTopic, postNewMessageBtn, cancelNewMessageBtn, changePasswordBtn, backFromProfileBtn, profileBtn *tview.Button, themeColorSec tcell.Color) {
@@ -68,6 +74,25 @@ func updateThemeColors(app *tview.Application, createBtn, loginBtn, createAccoun
 	backFromProfileBtn.SetStyle(tcell.StyleDefault.Foreground(themeColorSec).Background(tcell.ColorWhite))
 
 	app.Draw()
+}
+
+func showStatusMessage(app *tview.Application, status *tview.TextView, message string, color tcell.Color) {
+	if statusTicker != nil {
+		statusTicker.Stop()
+	}
+
+	status.SetTextColor(color)
+	status.SetText(message)
+
+	statusTicker = time.NewTicker(2 * time.Second)
+	go func() {
+		<-statusTicker.C
+		app.QueueUpdateDraw(func() {
+			status.SetText("")
+		})
+		statusTicker.Stop()
+		statusTicker = nil
+	}()
 }
 
 func main() {
@@ -162,7 +187,6 @@ func main() {
 	loginGrid.AddItem(backFromLoginBtn, 7, 1, 1, 1, 0, 30, false)
 	loginGrid.AddItem(status, 9, 1, 1, 2, 0, 0, false)
 
-	//GLAVNA STRUKTURA
 	loginFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(loginGrid, 0, 1, true)
@@ -209,18 +233,13 @@ func main() {
 		AddItem(topicsGrid, 0, 1, false)
 	topicsPanel.SetBorder(true).SetTitle(" Topics ")
 
-	messagesGrid := tview.NewGrid().
-		SetRows(0).
-		SetColumns(0).
-		SetBorders(false)
-
-	messagesScroll := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(messagesGrid, 0, 1, true)
+	messagesTable := tview.NewList().
+		ShowSecondaryText(true)
+	messagesTable.SetBackgroundColor(tcell.ColorDefault)
 
 	messagesDetailAll := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(messagesScroll, 0, 1, false).
+		AddItem(messagesTable, 0, 1, true).
 		AddItem(status, 1, 1, false).
 		AddItem(subsribeTopic, 3, 1, false).
 		AddItem(newMessageBtn, 3, 1, false)
@@ -231,7 +250,7 @@ func main() {
 		AddItem(topicsPanel, 0, 1, false).
 		AddItem(messagesDetailAll, 0, 3, false)
 
-	//SCREEN 7: NEW MESSAGE - Pisanje novega sporočila
+	//SCREEN 7: NEW MESSAGE
 
 	newMessageTitle := tview.NewInputField().
 		SetLabel("Title: ").
@@ -292,24 +311,10 @@ func main() {
 
 	dropdown := tview.NewDropDown().
 		SetLabel("Theme: ").
-		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, func(option string, optionIndex int) {
-			switch option {
-			case "Pink":
-				themeColorSec = tcell.ColorRed
-			case "Green":
-				themeColorSec = tcell.ColorGreen
-			case "Orange":
-				themeColorSec = tcell.ColorOrange
-			case "Blue":
-				themeColorSec = tcell.ColorBlue
-			case "Red":
-				themeColorSec = tcell.ColorRed
-			case "Violet":
-				themeColorSec = tcell.ColorPaleVioletRed
-			}
-		})
-	//updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, profileBtn, newMessageBtn, subsribeTopic, changePasswordBtn, backFromProfileBtn, postNewMessageBtn, cancelNewMessageBtn, themeColorSec)
+		SetOptions([]string{"Pink", "Green", "Orange", "Blue", "Red", "Violet"}, nil)
 	dropdown.SetLabelColor(tcell.ColorWhite)
+	dropdown.SetFieldBackgroundColor(tcell.ColorBlack)
+	dropdown.SetFieldTextColor(tcell.ColorWhite)
 
 	logoutBtn := tview.NewButton("Log out")
 	logoutBtn.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorLightGray))
@@ -336,28 +341,25 @@ func main() {
 		SetDirection(tview.FlexRow).
 		AddItem(profileGrid, 0, 1, true)
 
-	profileMessagesGrid := tview.NewGrid().
-		SetRows(0).
-		SetColumns(0).
-		SetBorders(false)
-
-	profileMessagesScroll := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(profileMessagesGrid, 0, 1, true)
+	// Use List for profile messages (same style as main page)
+	profileMessagesList := tview.NewList().
+		ShowSecondaryText(true)
+	profileMessagesList.SetBackgroundColor(tcell.ColorDefault)
 
 	profileMessagesPanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(profileMessagesScroll, 0, 1, false)
+		AddItem(profileMessagesList, 0, 1, true)
+	profileMessagesPanel.SetBorder(true).SetTitle(" My Messages ")
 
 	profileFlex := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
 		AddItem(profilePanel, 0, 1, false).
-		AddItem(profileMessagesPanel, 0, 2, false)
+		AddItem(profileMessagesPanel, 0, 2, true)
 	profileFlex.SetBorder(true).SetTitle(" Profile ")
 
 	//FUNKCIJE
 
-	//FUNKCIJA KI NALOZI VSE TOPICS
+	//za profil
 	updateProfileDisplay := func() {
 		profileUsernameDisplay.SetText("Username: " + currentUsername)
 
@@ -369,46 +371,147 @@ func main() {
 				UserId: currentUserID,
 			})
 			app.QueueUpdateDraw(func() {
-				profileMessagesGrid.Clear()
+				profileMessagesList.Clear()
 
 				if err != nil {
-					errorText := tview.NewTextView().SetText("Error loading messages: " + err.Error())
-					errorText.SetTextColor(tcell.ColorRed)
-					profileMessagesGrid.AddItem(errorText, 0, 0, 1, 1, 0, 0, false)
+					showStatusMessage(app, status, "Failed to load messages", tcell.ColorRed)
 					return
 				}
 
 				if len(resp.Messages) == 0 {
-					emptyText := tview.NewTextView().SetText("No messages yet")
-					emptyText.SetTextColor(tcell.ColorGray)
-					profileMessagesGrid.AddItem(emptyText, 0, 0, 1, 1, 0, 0, false)
+					profileMessagesList.AddItem("No messages yet.", "", 0, nil)
 					return
 				}
 
-				// Prikaži vsa sporočila
-				for i, msg := range resp.Messages {
-					messageText := fmt.Sprintf(
-						"[%s] Topic: %s (ID: %d)\n%s\n[Likes: %d]",
-						msg.CreatedAt.AsTime().Format("2006-01-02 15:04"),
-						msg.TopicName,
-						msg.MessageId,
-						msg.Text,
-						msg.Likes,
-					)
+				for _, msg := range resp.Messages {
+					// Header with topic name
+					header := fmt.Sprintf("[:/%s]", msg.TopicName)
 
-					msgView := tview.NewTextView().
-						SetText(messageText).
-						SetDynamicColors(true).
-						SetWordWrap(true)
-					msgView.SetTextColor(tcell.ColorWhite)
-					msgView.SetBorder(true)
+					// Parse title from text if present
+					text := msg.Text
+					title := ""
+					if len(text) > 0 && text[0] == '[' {
+						endIdx := -1
+						for j, c := range text {
+							if c == ']' {
+								endIdx = j
+								break
+							}
+						}
+						if endIdx > 0 {
+							title = text[1:endIdx]
+							text = text[endIdx+2:]
+							header = fmt.Sprintf("[:/%s | %s]", msg.TopicName, title)
+						}
+					}
 
-					profileMessagesGrid.AddItem(msgView, i, 0, 1, 1, 0, 0, false)
+					// Message item (header + text)
+					profileMessagesList.AddItem(header, text, 0, nil)
+
+					// Time and likes
+					profileMessagesList.AddItem(fmt.Sprintf("%s • %d likes", msg.CreatedAt.AsTime().Format("02.01.2006 15:04"), msg.Likes), "", 0, nil)
+
+					// Edit button - clickable
+					topicID := msg.TopicId
+					messageID := msg.MessageId
+					msgText := msg.Text
+					profileMessagesList.AddItem("[Edit]", "", 0, func() {
+						// Create edit modal
+						editTextarea := tview.NewTextArea()
+						editTextarea.SetText(msgText, true)
+						editTextarea.SetBorder(true).SetTitle(" Edit Message ")
+
+						saveBtn := tview.NewButton("Save")
+						cancelBtn := tview.NewButton("Cancel")
+
+						editGrid := tview.NewGrid().
+							SetRows(0, 3).
+							SetColumns(0, 15, 15, 0).
+							SetBorders(false)
+						editGrid.AddItem(editTextarea, 0, 0, 1, 4, 0, 0, true)
+						editGrid.AddItem(saveBtn, 1, 1, 1, 1, 0, 0, false)
+						editGrid.AddItem(cancelBtn, 1, 2, 1, 1, 0, 0, false)
+
+						editFlex := tview.NewFlex().
+							SetDirection(tview.FlexRow).
+							AddItem(editGrid, 0, 1, true)
+						editFlex.SetBorder(true).SetTitle(" Edit Message ")
+
+						pages.AddPage("editMessage", editFlex, true, true)
+
+						saveBtn.SetSelectedFunc(func() {
+							newText := editTextarea.GetText()
+							go func() {
+								ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+								defer cancel()
+
+								_, err := grpcClient.UpdateMessage(ctx, &razp.UpdateMessageRequest{
+									TopicId:   topicID,
+									MessageId: messageID + 1,
+									UserId:    currentUserID,
+									Text:      newText,
+								})
+								app.QueueUpdateDraw(func() {
+									pages.RemovePage("editMessage")
+									if err != nil {
+										showStatusMessage(app, status, "Failed to update message", tcell.ColorRed)
+										return
+									}
+									showStatusMessage(app, status, "Message updated!", tcell.ColorGreen)
+									updateProfileDisplay()
+								})
+							}()
+						})
+
+						cancelBtn.SetSelectedFunc(func() {
+							pages.RemovePage("editMessage")
+						})
+
+						app.SetFocus(editTextarea)
+					})
+
+					// Delete button - clickable
+					profileMessagesList.AddItem("[Delete]", "", 0, func() {
+						// Confirm delete
+						modal := tview.NewModal().
+							SetText("Are you sure you want to delete this message?").
+							AddButtons([]string{"Delete", "Cancel"}).
+							SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+								if buttonLabel == "Delete" {
+									go func() {
+										ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+										defer cancel()
+
+										_, err := grpcClient.DeleteMessage(ctx, &razp.DeleteMessageRequest{
+											TopicId:   topicID,
+											MessageId: messageID + 1,
+											UserId:    currentUserID,
+										})
+										app.QueueUpdateDraw(func() {
+											pages.RemovePage("deleteConfirm")
+											if err != nil {
+												showStatusMessage(app, status, "Failed to delete message", tcell.ColorRed)
+												return
+											}
+											showStatusMessage(app, status, "Message deleted!", tcell.ColorGreen)
+											updateProfileDisplay()
+										})
+									}()
+								} else {
+									pages.RemovePage("deleteConfirm")
+								}
+							})
+						pages.AddPage("deleteConfirm", modal, true, true)
+					})
+
+					// Separator
+					profileMessagesList.AddItem(" ", "", 0, nil)
 				}
 			})
 		}()
 	}
 
+	//za topics na levi
 	loadTopics := func() {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -418,19 +521,21 @@ func main() {
 			app.QueueUpdateDraw(func() {
 				topicList.Clear()
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText(err.Error())
+					showStatusMessage(app, status, "Failed to load topics", tcell.ColorRed)
 					return
 				}
 
+				topicList.AddItem("Home", "", 0, nil)
+
 				for _, t := range resp.Topics {
-					topicList.AddItem(t.Name, "", 0, nil)
+					topicList.AddItem(":/ "+t.Name, "", 0, nil)
 				}
 
 			})
 		}()
 	}
 
+	//sharni userje
 	loadUsers := func() {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -438,13 +543,11 @@ func main() {
 
 			resp, err := grpcClient.ListUsers(ctx, &emptypb.Empty{})
 			if err != nil {
-				fmt.Printf("Napaka pri učitavanju uporabnikov: %v\n", err)
 				return
 			}
 
-			// Popuni userMap
 			for _, user := range resp.Users {
-				userMap[user.Id] = user.Name
+				userMap[int(user.Id)] = user.Name
 			}
 		}()
 	}
@@ -454,8 +557,7 @@ func main() {
 		name := usernameField.GetText()
 		pass := passwordField.GetText()
 		if name == "" || pass == "" { //potrebno dodati funkcijo ki preverja kako korekten je input
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Username and password required")
+			showStatusMessage(app, status, "Username and password required", tcell.ColorRed)
 			return
 		}
 		go func() {
@@ -468,14 +570,15 @@ func main() {
 			})
 			app.QueueUpdateDraw(func() {
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Account with that username already exist")
+					showStatusMessage(app, status, "Account with that username already exist", tcell.ColorRed)
 				} else {
 					currentUsername = name
 					currentUserID = raz.Id
 					pages.SwitchToPage("home")
 					loadTopics()
 					loadUsers()
+					selectedTopicIndex = -1
+					loadAllMessages() // Load all messages as feed
 					app.SetFocus(topicList)
 				}
 			})
@@ -493,13 +596,11 @@ func main() {
 			resp, err := grpcClient.CreateTopic(ctx, req)
 			app.QueueUpdateDraw(func() {
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Topic with same name already exists, please choose a different name")
+					showStatusMessage(app, status, "Topic with same name already exists, please choose a different name", tcell.ColorRed)
 					return
 				}
 
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText("Topic '" + resp.Name + "' created successfully")
+				showStatusMessage(app, status, "Topic '"+resp.Name+"' created successfully", tcell.ColorGreen)
 
 				newTopicInput.SetText("")
 
@@ -513,8 +614,7 @@ func main() {
 		name := loginUsername.GetText()
 		pass := loginPassword.GetText()
 		if name == "" || pass == "" {
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Username and password required")
+			showStatusMessage(app, status, "Username and password required", tcell.ColorRed)
 			return
 		} else {
 			go func() {
@@ -527,14 +627,15 @@ func main() {
 				})
 				app.QueueUpdateDraw(func() {
 					if err != nil {
-						status.SetTextColor(tcell.ColorRed)
-						status.SetText("Password does not match the username")
+						showStatusMessage(app, status, "Password does not match the username", tcell.ColorRed)
 					} else {
 						currentUserID = raz.Id
 						currentUsername = name
 						pages.SwitchToPage("home")
 						loadTopics()
 						loadUsers()
+						selectedTopicIndex = -1
+						loadAllMessages() // Load all messages as feed on login
 					}
 				})
 			}()
@@ -542,7 +643,7 @@ func main() {
 	}
 
 	// FUNKCIJA ZA NALAGANJE SPOROČIL IZ TOPIC
-	loadMessagesForTopic := func(topicIndex int) {
+	loadMessagesForTopic = func(topicIndex int) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -550,20 +651,34 @@ func main() {
 			resp, err := grpcClient.GetMessages(ctx, &razp.GetMessagesRequest{
 				TopicId:       int64(topicIndex) + 1,
 				FromMessageId: 0,
-				Limit:         100,
+				Limit:         1000,
 			})
+
+			topicsResp, topicErr := grpcClient.ListTopics(ctx, &emptypb.Empty{})
+			topicName := ""
+			if topicErr == nil && topicIndex < len(topicsResp.Topics) {
+				topicName = topicsResp.Topics[topicIndex].Name
+			}
+
 			app.QueueUpdateDraw(func() {
-				messagesGrid.Clear()
-				messagesGrid.SetRows(0).SetColumns(0)
+				messagesTable.Clear()
 
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Failed to load messages: " + err.Error())
+					showStatusMessage(app, status, "Failed to load messages", tcell.ColorRed)
 					return
 				}
 
-				row := 0
+				if len(resp.Messages) == 0 {
+					messagesTable.AddItem("No messages yet.", "", 0, nil)
+					return
+				}
+
 				for _, msg := range resp.Messages {
+					// Skip deleted messages
+					if msg.Text == "message deleted by user" {
+						continue
+					}
+
 					text := msg.Text
 					title := ""
 
@@ -581,64 +696,154 @@ func main() {
 						}
 					}
 
-					messageView := tview.NewTextView().
-						SetDynamicColors(true).
-						SetWrap(true).
-						SetText(text)
-					messageView.SetBorder(true).SetTitle(fmt.Sprintf(" %s ", title)).SetTitleAlign(tview.AlignLeft)
-					messageView.SetBackgroundColor(tcell.ColorDefault)
+					username := userMap[int(msg.UserId)]
 
-					likeCheckbox := tview.NewCheckbox().
-						SetLabel(fmt.Sprintf("%d likes", msg.Likes))
-					likeCheckbox.SetChangedFunc(func(checked bool) {
-						// Klik na Like - pošalji LikeMessage RPC
+					header := fmt.Sprintf("[:/%s | %s]", topicName, title)
+
+					// topic | naslov + sporocilo
+					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", username, msg.CreatedAt.AsTime().Format("01.02.2025 15:04"))+"[-]", 0, nil)
+
+					messagesTable.AddItem(" ", "", 0, nil)
+
+					// ime in ura
+					messagesTable.AddItem("[white]"+text+"[-]", "", 0, nil)
+
+					// lajki - clickable
+					msgID := msg.Id
+					tIdx := topicIndex
+					messagesTable.AddItem("[gray]"+fmt.Sprintf("%d likes", msg.Likes)+"[-]", "", 0, func() {
 						go func() {
 							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 							defer cancel()
 
 							_, err := grpcClient.LikeMessage(ctx, &razp.LikeMessageRequest{
-								TopicId:   int64(topicIndex) + 1,
-								MessageId: msg.Id + 1,
+								TopicId:   int64(tIdx) + 1,
+								MessageId: msgID + 1,
 								UserId:    currentUserID,
 							})
 							app.QueueUpdateDraw(func() {
 								if err != nil {
-									status.SetTextColor(tcell.ColorRed)
-									status.SetText("Failed to like message: " + err.Error())
+									showStatusMessage(app, status, "Failed to like", tcell.ColorRed)
 									return
 								}
-
+								showStatusMessage(app, status, "Liked!", tcell.ColorGreen)
+								loadMessagesForTopic(tIdx)
 							})
 						}()
 					})
 
-					metaText := fmt.Sprintf("by %s | %s", userMap[msg.UserId], msg.CreatedAt.AsTime().Format("15:04"))
-					metaView := tview.NewTextView().
-						SetText(metaText).
-						SetTextAlign(tview.AlignLeft)
-					metaView.SetTextColor(tcell.ColorGray)
+					// Empty separator row
+					messagesTable.AddItem(" ", "", 0, nil)
+				}
+			})
+		}()
+	}
 
-					messagesGrid.AddItem(messageView, row, 0, 1, 1, 0, 0, false)
-					messagesGrid.AddItem(metaView, row+1, 0, 1, 1, 0, 0, false)
-					messagesGrid.AddItem(likeCheckbox, row+2, 0, 1, 1, 0, 0, true)
+	// FUNKCIJA ZA NALAGANJE VSEH SPOROČIL IZ VSEH TOPICOV
+	loadAllMessages = func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-					row += 3
+			topicsResp, err := grpcClient.ListTopics(ctx, &emptypb.Empty{})
+			if err != nil {
+				app.QueueUpdateDraw(func() {
+					showStatusMessage(app, status, "Failed to load topics", tcell.ColorRed)
+				})
+				return
+			}
+
+			type messageWithTopic struct {
+				msg       *razp.Message
+				topicName string
+				topicIdx  int
+			}
+			var allMessages []messageWithTopic
+
+			for i, topic := range topicsResp.Topics {
+				msgResp, err := grpcClient.GetMessages(ctx, &razp.GetMessagesRequest{
+					TopicId:       topic.Id,
+					FromMessageId: 0,
+					Limit:         1000,
+				})
+				if err != nil {
+					continue
 				}
 
-				rows := make([]int, row)
-				for i := range rows {
-					if i%2 == 0 {
-						rows[i] = 5
-					} else {
-						rows[i] = 1
+				for _, msg := range msgResp.Messages {
+					if msg.Text != "message deleted by user" {
+						allMessages = append(allMessages, messageWithTopic{
+							msg:       msg,
+							topicName: topic.Name,
+							topicIdx:  i,
+						})
 					}
 				}
-				if len(rows) > 0 {
-					messagesGrid.SetRows(rows...)
+			}
+
+			app.QueueUpdateDraw(func() {
+				messagesTable.Clear()
+
+				if len(allMessages) == 0 {
+					messagesTable.AddItem("No messages yet.", "", 0, nil)
+					return
 				}
 
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText(fmt.Sprintf("Loaded %d messages", len(resp.Messages)))
+				for _, item := range allMessages {
+					msg := item.msg
+					text := msg.Text
+					title := ""
+
+					if len(text) > 0 && text[0] == '[' {
+						endIdx := -1
+						for j, c := range text {
+							if c == ']' {
+								endIdx = j
+								break
+							}
+						}
+						if endIdx > 0 {
+							title = text[1:endIdx]
+							text = text[endIdx+2:]
+						}
+					}
+
+					header := fmt.Sprintf("[:/%s | %s]", item.topicName, title)
+
+					messagesTable.AddItem("[white]"+header+"[-]", "[gray]"+fmt.Sprintf("%s on %s", userMap[int(msg.UserId)], msg.CreatedAt.AsTime().Format("01. 02. 2025 15:04"))+"[-]", 0, nil)
+
+					messagesTable.AddItem(" ", "", 0, nil)
+
+					// ime in ura
+					messagesTable.AddItem("[white]"+text+"[-]", "", 0, nil)
+
+					// lajki - clickable
+					msgID := msg.Id
+					tIdx := item.topicIdx
+					messagesTable.AddItem("[gray]"+fmt.Sprintf("%d likes", msg.Likes)+"[-]", "", 0, func() {
+						go func() {
+							ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+							defer cancel()
+
+							_, err := grpcClient.LikeMessage(ctx, &razp.LikeMessageRequest{
+								TopicId:   int64(tIdx) + 1,
+								MessageId: msgID + 1,
+								UserId:    currentUserID,
+							})
+							app.QueueUpdateDraw(func() {
+								if err != nil {
+									showStatusMessage(app, status, "Failed to like", tcell.ColorRed)
+									return
+								}
+								showStatusMessage(app, status, "Liked!", tcell.ColorGreen)
+								loadAllMessages()
+							})
+						}()
+					})
+
+					// Empty separator row
+					messagesTable.AddItem(" ", "", 0, nil)
+				}
 			})
 		}()
 	}
@@ -648,8 +853,7 @@ func main() {
 		messageTitle := newMessageTitle.GetText()
 
 		if messageText == "" {
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Message cannot be empty")
+			showStatusMessage(app, status, "Message cannot be empty", tcell.ColorRed)
 			return
 		}
 
@@ -669,19 +873,17 @@ func main() {
 			})
 			app.QueueUpdateDraw(func() {
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Failed to post message: " + err.Error())
+					showStatusMessage(app, status, "Failed to post message", tcell.ColorRed)
 					return
 				}
 
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText("Message posted successfully")
+				showStatusMessage(app, status, "Message posted successfully", tcell.ColorGreen)
 				newMessageTextarea.SetText("", false)
 				newMessageTitle.SetText("")
 
 				loadMessagesForTopic(topicIndex)
-				pages.SwitchToPage("topicDetail")
-				app.SetFocus(messagesGrid)
+				pages.SwitchToPage("home")
+				app.SetFocus(messagesTable)
 			})
 		}()
 	}
@@ -720,7 +922,15 @@ func main() {
 	loginButton.SetSelectedFunc(loginFunc)
 
 	//OSVEZI TOPICS
-	refreshBtn.SetSelectedFunc(loadTopics)
+	refreshBtn.SetSelectedFunc(func() {
+		loadTopics()
+		loadUsers()
+		if selectedTopicIndex == -1 {
+			loadAllMessages()
+		} else {
+			loadMessagesForTopic(selectedTopicIndex)
+		}
+	})
 
 	profileBtn.SetSelectedFunc(func() {
 		pages.SwitchToPage("profile")
@@ -735,19 +945,29 @@ func main() {
 	createTopicBtn.SetSelectedFunc(func() {
 		topicName := newTopicInput.GetText()
 		if topicName == "" {
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Topic name cannot be empty")
+			showStatusMessage(app, status, "Topic name cannot be empty", tcell.ColorRed)
 		}
 		createTopic(topicName)
 	})
 
 	// FUNKCIJA ZA KLIK NA TOPIC
 	topicList.SetSelectedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
-		selectedTopicIndex = index
-		loadMessagesForTopic(index)
+		if index == 0 {
+			// "All Topics" selected - show all messages
+			selectedTopicIndex = -1
+			loadAllMessages()
+		} else {
+			// Specific topic selected (offset by 1 because of "All Topics" at index 0)
+			selectedTopicIndex = index - 1
+			loadMessagesForTopic(selectedTopicIndex)
+		}
 	})
 
 	newMessageBtn.SetSelectedFunc(func() {
+		if selectedTopicIndex == -1 {
+			showStatusMessage(app, status, "Please select a specific topic first!", tcell.ColorRed)
+			return
+		}
 		newMessageTextarea.SetText("", false)
 		pages.SwitchToPage("newMessage")
 	})
@@ -778,8 +998,7 @@ func main() {
 		newPass := profileNewPassword.GetText()
 
 		if oldPass == "" || newPass == "" {
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Both passwords required")
+			showStatusMessage(app, status, "Both passwords required", tcell.ColorRed)
 			return
 		}
 
@@ -794,13 +1013,21 @@ func main() {
 
 			app.QueueUpdateDraw(func() {
 				if err != nil {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Old password is incorrect")
+					showStatusMessage(app, status, "Old password is incorrect", tcell.ColorRed)
 					return
 				}
 
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText("Password change: waiting for server implementation")
+				_, err1 := grpcClient.ChangePass(ctx, &razp.ChangeUserRequest{
+					Id:       currentUserID,
+					Password: newPass,
+				})
+
+				if err1 != nil {
+					showStatusMessage(app, status, "Could't change password", tcell.ColorRed)
+					return
+				}
+
+				showStatusMessage(app, status, "Password was changed", tcell.ColorGreen)
 
 				profileOldPassword.SetText("")
 				profileNewPassword.SetText("")
@@ -810,8 +1037,7 @@ func main() {
 
 	subsribeTopic.SetSelectedFunc(func() {
 		if selectedTopicIndex == -1 {
-			status.SetTextColor(tcell.ColorRed)
-			status.SetText("Please select a topic first!")
+			showStatusMessage(app, status, "Please select a specific topic first!", tcell.ColorRed)
 			return
 		}
 
@@ -827,36 +1053,46 @@ func main() {
 
 			if err != nil {
 				app.QueueUpdateDraw(func() {
-					status.SetTextColor(tcell.ColorRed)
-					status.SetText("Subscribe error: " + err.Error())
+					showStatusMessage(app, status, "Subscribe error", tcell.ColorRed)
 				})
 				return
 			}
 
 			app.QueueUpdateDraw(func() {
-				status.SetTextColor(tcell.ColorGreen)
-				status.SetText("Subscribed! Waiting for new messages...")
+				showStatusMessage(app, status, "Subscribed!", tcell.ColorGreen)
 			})
 
 			for {
 				ev, err := stream.Recv()
 				if err != nil {
 					app.QueueUpdateDraw(func() {
-						status.SetTextColor(tcell.ColorYellow)
-						status.SetText("Subscription ended")
+						showStatusMessage(app, status, "Subscription ended", tcell.ColorYellow)
 					})
 					break
 				}
 
 				app.QueueUpdateDraw(func() {
 					loadMessagesForTopic(selectedTopicIndex)
-					status.SetTextColor(tcell.ColorGreen)
-					status.SetText("New message received!")
+					showStatusMessage(app, status, "New message received!", tcell.ColorGreen)
 				})
 
 				_ = ev
 			}
 		}()
+	})
+
+	dropdown.SetSelectedFunc(func(text string, index int) {
+		colorMap := map[string]tcell.Color{
+			"Pink":   tcell.ColorLightPink,
+			"Blue":   tcell.ColorBlue,
+			"Red":    tcell.ColorRed,
+			"Green":  tcell.ColorGreen,
+			"Orange": tcell.ColorOrange,
+			"Violet": tcell.ColorPurple,
+		}
+
+		themeColorSec = colorMap[text]
+		updateThemeColors(app, createBtn, loginBtn, createAccountButton, backFromSignupBtn, loginButton, backFromLoginBtn, createTopicBtn, refreshBtn, newMessageBtn, subsribeTopic, postNewMessageBtn, cancelNewMessageBtn, changePasswordBtn, backFromProfileBtn, profileBtn, themeColorSec)
 	})
 
 	//ČE PRITISNEMO ENTER
@@ -893,8 +1129,7 @@ func main() {
 		if key == tcell.KeyEnter {
 			topicName := newTopicInput.GetText()
 			if topicName == "" {
-				status.SetTextColor(tcell.ColorRed)
-				status.SetText("Topic name cannot be empty")
+				showStatusMessage(app, status, "Topic name cannot be empty", tcell.ColorRed)
 				return
 			}
 			createTopic(topicName)

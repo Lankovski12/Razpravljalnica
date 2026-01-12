@@ -97,6 +97,13 @@ service  MessageBoard{
 
   rpc GetUserMessages(GetUserMessagesRequest) returns (GetUserMessagesResponse);
 
+  rpc ChangePass(ChangeUserRequest) returns (google.protobuf.Empty);
+
+}
+
+message ChangeUserRequest {
+  int64 id = 1;
+  string password = 2;
 }
 
 message CreateUserRequest {
@@ -105,6 +112,11 @@ message CreateUserRequest {
 }
 
 message FindUserRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message PasswordRequest {
   string name = 1;
   string password = 2;
 }

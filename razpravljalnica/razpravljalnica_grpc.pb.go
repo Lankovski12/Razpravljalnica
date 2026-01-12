@@ -33,6 +33,7 @@ const (
 	MessageBoard_SubscribeTopic_FullMethodName       = "/razpravljalnica.MessageBoard/SubscribeTopic"
 	MessageBoard_ListUsers_FullMethodName            = "/razpravljalnica.MessageBoard/ListUsers"
 	MessageBoard_GetUserMessages_FullMethodName      = "/razpravljalnica.MessageBoard/GetUserMessages"
+	MessageBoard_ChangePass_FullMethodName           = "/razpravljalnica.MessageBoard/ChangePass"
 )
 
 // MessageBoardClient is the client API for MessageBoard service.
@@ -62,6 +63,7 @@ type MessageBoardClient interface {
 	SubscribeTopic(ctx context.Context, in *SubscribeTopicRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MessageEvent], error)
 	ListUsers(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListUsersResponse, error)
 	GetUserMessages(ctx context.Context, in *GetUserMessagesRequest, opts ...grpc.CallOption) (*GetUserMessagesResponse, error)
+	ChangePass(ctx context.Context, in *ChangeUserRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type messageBoardClient struct {
@@ -211,6 +213,16 @@ func (c *messageBoardClient) GetUserMessages(ctx context.Context, in *GetUserMes
 	return out, nil
 }
 
+func (c *messageBoardClient) ChangePass(ctx context.Context, in *ChangeUserRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, MessageBoard_ChangePass_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessageBoardServer is the server API for MessageBoard service.
 // All implementations must embed UnimplementedMessageBoardServer
 // for forward compatibility.
@@ -238,6 +250,7 @@ type MessageBoardServer interface {
 	SubscribeTopic(*SubscribeTopicRequest, grpc.ServerStreamingServer[MessageEvent]) error
 	ListUsers(context.Context, *emptypb.Empty) (*ListUsersResponse, error)
 	GetUserMessages(context.Context, *GetUserMessagesRequest) (*GetUserMessagesResponse, error)
+	ChangePass(context.Context, *ChangeUserRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedMessageBoardServer()
 }
 
@@ -286,6 +299,9 @@ func (UnimplementedMessageBoardServer) ListUsers(context.Context, *emptypb.Empty
 }
 func (UnimplementedMessageBoardServer) GetUserMessages(context.Context, *GetUserMessagesRequest) (*GetUserMessagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserMessages not implemented")
+}
+func (UnimplementedMessageBoardServer) ChangePass(context.Context, *ChangeUserRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChangePass not implemented")
 }
 func (UnimplementedMessageBoardServer) mustEmbedUnimplementedMessageBoardServer() {}
 func (UnimplementedMessageBoardServer) testEmbeddedByValue()                      {}
@@ -535,6 +551,24 @@ func _MessageBoard_GetUserMessages_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageBoard_ChangePass_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChangeUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageBoardServer).ChangePass(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageBoard_ChangePass_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageBoardServer).ChangePass(ctx, req.(*ChangeUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessageBoard_ServiceDesc is the grpc.ServiceDesc for MessageBoard service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -589,6 +623,10 @@ var MessageBoard_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUserMessages",
 			Handler:    _MessageBoard_GetUserMessages_Handler,
+		},
+		{
+			MethodName: "ChangePass",
+			Handler:    _MessageBoard_ChangePass_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
